@@ -54,6 +54,14 @@ Tempo: acierta entre 80 y 165 pulsos/min en pruebas sintéticas; puede confundir
 4. **Voz cantada.** En vallenato la voz suele ir más alta que el acordeón. Cuando haya canto, el sesgo hacia la voz aguda la puede confundir con la melodía. Opciones: separación de fuentes con un modelo (Demucs/Spleeter, procesado fuera del navegador) o un modelo neuronal de pitch (CREPE/SPICE con TensorFlow.js).
 5. **Notas simultáneas.** Hoy se extrae una sola línea melódica. Las terceras y sextas paralelas (muy típicas) requieren un detector polifónico.
 
+## Sonido
+
+El sonido se sintetiza (no hay muestras grabadas), calibrado con una grabación de acordeón vallenato:
+perfil de armónicos por registro, trémolo casi seco (~4 cents; la medición dio mediana de 3 cents) y poco ruido de aire.
+Error medio frente a la grabación: 1,7 dB (grave), 4,5 dB (medio), 1,9 dB (agudo).
+Para recalibrar con otro instrumento: `tools/extraer-notas.mjs` + `tools/calibrar-sonido.py` y pegar el resultado en `PROFILE` de `js/reed.js`.
+Siguiente nivel: muestreo del acordeón propio (grabar cada botón cerrando y abriendo).
+
 ## Pendiente de validar con un acordeonero
 
 - [ ] Octava real de los botones auxiliares y registro absoluto de cada afinación.
