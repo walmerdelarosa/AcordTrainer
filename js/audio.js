@@ -1,6 +1,6 @@
-// Síntesis sin muestras: lengüetas con trémolo (dos voces desafinadas), bajos y percusión
-// (guacharaca y caja) para el metrónomo.
-import { midiToFreq } from './theory.js';
+// Sonido: lengüetas de acordeón modeladas (ver reed.js) y percusión (guacharaca y caja)
+// para el metrónomo. Sin muestras grabadas.
+import { reedVoice } from './reed.js';
 
 let ctx = null, master = null, noiseBuf = null;
 
@@ -28,65 +28,31 @@ export function createBus(gain = 1) {
   return g;
 }
 
-const TREMOLO_CENTS = 12;
+const kindOf = (bass, chord) => (bass ? (chord ? 'acorde' : 'bajo') : 'melodia');
 
-function voice(c, midi, { bass = false, dest = master, gain = 0.5 }) {
-  const f = midiToFreq(midi);
-  const out = c.createGain();
-  const lp = c.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.value = bass ? 900 : Math.min(5000, f * 6);
-  lp.Q.value = 0.7;
-  lp.connect(out).connect(dest);
-  const detunes = bass ? [0] : [0, TREMOLO_CENTS];
-  const oscs = detunes.map((d) => {
-    const o = c.createOscillator();
-    o.type = 'sawtooth';
-    o.frequency.value = f;
-    o.detune.value = d;
-    const g = c.createGain();
-    g.gain.value = 1 / detunes.length;
-    o.connect(g).connect(lp);
-    return o;
-  });
-  return { out, oscs, gain };
-}
-
-export function playMidi(midi, dur = 0.5, { when = 0, at = null, gain = 0.5, bass = false, dest } = {}) {
+/** Nota con duración fija (secuencias, reproductor). */
+export function playMidi(midi, dur = 0.5, { when = 0, at = null, gain = 0.5, bass = false, chord = false, dest } = {}) {
   const c = audioCtx();
   const t0 = at ?? c.currentTime + when;
-  const v = voice(c, midi, { bass, dest: dest || master, gain });
-  v.out.gain.setValueAtTime(0, t0);
-  v.out.gain.linearRampToValueAtTime(gain, t0 + 0.02);
-  v.out.gain.setValueAtTime(gain, t0 + Math.max(0.03, dur - 0.05));
-  v.out.gain.linearRampToValueAtTime(0, t0 + dur);
-  v.oscs.forEach((o) => { o.start(t0); o.stop(t0 + dur + 0.05); });
+  const v = reedVoice(c, dest || master, midi, { t0, gain, kind: kindOf(bass, chord) });
+  v.release(t0 + dur);
 }
 
 export function playChord(midis, dur = 1.0, opts = {}) {
-  midis.forEach((m) => playMidi(m, dur, { gain: 0.25, ...opts }));
+  midis.forEach((m) => playMidi(m, dur, { gain: 0.22, chord: true, ...opts }));
 }
 
 // ----- Notas sostenidas (teclado de PC / pantalla) -----
 const held = new Map();
-export function noteOn(key, midi, { bass = false, gain = 0.45 } = {}) {
+export function noteOn(key, midi, { bass = false, chord = false, gain = 0.45 } = {}) {
   noteOff(key);
   const c = audioCtx();
-  const v = voice(c, midi, { bass, gain });
-  const t = c.currentTime;
-  v.out.gain.setValueAtTime(0, t);
-  v.out.gain.linearRampToValueAtTime(gain, t + 0.015);
-  v.oscs.forEach((o) => o.start(t));
-  held.set(key, v);
+  held.set(key, reedVoice(c, master, midi, { t0: c.currentTime, gain, kind: kindOf(bass, chord) }));
 }
 export function noteOff(key) {
   const v = held.get(key);
   if (!v) return;
-  const c = audioCtx(), t = c.currentTime;
-  v.out.gain.cancelScheduledValues(t);
-  v.out.gain.setValueAtTime(v.out.gain.value, t);
-  v.out.gain.linearRampToValueAtTime(0, t + 0.04);
-  v.oscs.forEach((o) => o.stop(t + 0.06));
+  v.release(audioCtx().currentTime);
   held.delete(key);
 }
 export function allNotesOff() { [...held.keys()].forEach(noteOff); }

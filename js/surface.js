@@ -61,7 +61,7 @@ export function createSurface(root, { tuning, onNote, onRelease, sound = true, c
     heldBtns.set(id, b);
     const midi = midiOf(b, dir);
     if (sound) {
-      if (b.bass && b.kind === 'acorde') { noteOn(id, midi, { bass: true, gain: 0.25 }); noteOn(id + 'c3', midi + 4, { bass: true, gain: 0.2 }); noteOn(id + 'c5', midi + 7, { bass: true, gain: 0.2 }); }
+      if (b.bass && b.kind === 'acorde') { noteOn(id, midi, { bass: true, chord: true, gain: 0.22 }); noteOn(id + 'c3', midi + 4, { bass: true, chord: true, gain: 0.18 }); noteOn(id + 'c5', midi + 7, { bass: true, chord: true, gain: 0.18 }); }
       else noteOn(id, midi, { bass: !!b.bass });
     }
     kb.press(id, true);
