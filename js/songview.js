@@ -9,6 +9,12 @@ import { saveSong } from './library.js';
 import { createKeyboard } from './keyboard.js';
 import { playMidi } from './audio.js';
 import { icon } from './icons.js';
+import { ctrl } from './controller.js';
+
+const pref = {
+  get(k, d) { try { const v = localStorage.getItem('acordeon:play.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('acordeon:play.' + k, JSON.stringify(v)); } catch { /* */ } },
+};
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const slug = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'cancion';
@@ -41,9 +47,9 @@ export function mountSongPanel(root, song, { state, video = null, onSaved } = {}
       <label>Velocidad <select name="speed"><option value="0.5">50 %</option><option value="0.75">75 %</option><option value="0.9">90 %</option><option value="1" selected>100 %</option></select></label>
       <label>Compases <input type="number" name="from" min="1" value="1"> a <input type="number" name="to" min="1" value="${song.measures}"></label>
       <label class="check"><input type="checkbox" name="loop"> Repetir</label>
-      <label class="check"><input type="checkbox" name="metro" checked> Guacharaca</label>
-      <label class="check"><input type="checkbox" name="bass" checked> Bajos</label>
-      <label class="check"><input type="checkbox" name="melody" checked> Melodía</label>
+      <label class="check"><input type="checkbox" name="melody" ${pref.get('melody', true) ? 'checked' : ''}> Melodía</label>
+      <label class="check"><input type="checkbox" name="bass" ${pref.get('bass', false) ? 'checked' : ''}> Bajos</label>
+      <label class="check"><input type="checkbox" name="metro" ${pref.get('metro', false) ? 'checked' : ''}> Compás (guacharaca)</label>
     </div>
     <div class="score-legend muted small">Tablatura: <b>af / me / ad</b> = hilera de afuera, del medio y de adentro; el número es el botón (1 = arriba). Fuelle: <span class="push-t">C cerrando</span> · <span class="pull-t">A abriendo</span>. Bajos: <b>Sib</b> = bajo, <b>sib</b> = acorde; el número pequeño es el botón de bajo. Toca una nota para editarla.</div>
     <div class="score-scroll"><div class="score-box"></div></div>
@@ -60,6 +66,7 @@ export function mountSongPanel(root, song, { state, video = null, onSaved } = {}
     </div>
   </section>`;
   const q = (s) => root.querySelector(s);
+  ['melody', 'bass', 'metro'].forEach((k) => { q(`[name=${k}]`).onchange = (e) => pref.set(k, e.target.checked); });
   let score, selected = -1;
   const bassOnly = song.notes.length === 0;
   const followKb = createKeyboard(q('.follow-kb'), { tuning, mode: 'both', showBass: bassOnly, orientation: 'horizontal' });
@@ -87,6 +94,7 @@ export function mountSongPanel(root, song, { state, video = null, onSaved } = {}
     if (next?.pos) marks.push({ btnId: next.pos.btn.id, dir: next.pos.dir, label: '›' });
     if (cur?.pos && tick < cur.tick + cur.dur + 0.5) marks.push({ btnId: cur.pos.btn.id, dir: cur.pos.dir, label: '●', active: true });
     followKb.mark(marks);
+    ctrl.mark(marks.filter((m) => m.active));
   }
 
   function draw() {

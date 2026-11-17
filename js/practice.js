@@ -13,6 +13,7 @@ import { SongPlayer } from './player.js';
 import { METERS, ticksPerMeasure } from './rhythm.js';
 import { listSongs, getSong } from './library.js';
 import { icon } from './icons.js';
+import { ctrl } from './controller.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const PRAISE = ['¡Eso es!', '¡Bien tocao!', '¡Ajá!', '¡Qué nota!', '¡Así mismo!'];
@@ -48,6 +49,7 @@ export function mountPractice(main, state, F) {
         ${song ? `<div class="seg" role="group" aria-label="Modo">
           <button class="btn ghost sm" data-mode="step">Paso a paso</button>
           <button class="btn ghost sm" data-mode="rhythm">Con ritmo</button></div>
+          <label class="rhythm-only check"><input type="checkbox" name="metro" checked> Guacharaca</label>
           <label class="rhythm-only">Velocidad <select name="speed"><option value="0.5">50 %</option><option value="0.75" selected>75 %</option><option value="0.9">90 %</option><option value="1">100 %</option></select></label>
           <label>Compases <input type="number" name="from" min="1" value="1"> a <input type="number" name="to" min="1" value="${song.measures}"></label>` : ''}
         <button class="btn accent start">${icon('play')} Empezar</button>
@@ -113,7 +115,7 @@ export function mountPractice(main, state, F) {
 
   function show() {
     const tg = active[cur];
-    if (!tg) { q('.big-note').textContent = '¡Listo!'; q('.where').textContent = ''; surface.kb.mark([]); return; }
+    if (!tg) { q('.big-note').textContent = '¡Listo!'; q('.where').textContent = ''; ctrl.mark([]); return; }
     q('.big-note').textContent = tg.name;
     const row = tg.bass ? `Bajos, ${tg.kind} ${bassNumber(tg.pos.btn)}` : `${ROWS.find((r) => r.id === tg.pos?.btn.row)?.label ?? ''}, botón ${tg.pos?.btn.index}`;
     q('.where').innerHTML = tg.pos ? `${esc(row)} · <b class="${tg.pos.dir}-t">${tg.pos.dir === 'push' ? 'cerrando' : 'abriendo'}</b>` : '';
@@ -121,7 +123,7 @@ export function mountPractice(main, state, F) {
     const marks = [];
     if (next?.pos && mode === 'step') marks.push({ btnId: next.pos.btn.id, dir: next.pos.dir, label: '›' });
     if (tg.pos) marks.push({ btnId: tg.pos.btn.id, dir: tg.pos.dir, label: '●', active: true });
-    surface.kb.mark(marks);
+    ctrl.mark(marks);
     if (score && mode === 'step') { if (!bassOnly) score.select(tg.i); score.setCursor(tg.tick); }
     if (chips) chips.querySelectorAll('li').forEach((li) => li.classList.toggle('on', +li.dataset.k === cur));
     q('.tally').textContent = `${hits} / ${hits + misses}`;
@@ -255,7 +257,7 @@ export function mountPractice(main, state, F) {
       const tpm = ticksPerMeasure(song.meter);
       const f = Math.max(1, +q('[name=from]').value || 1), to = Math.max(f, +q('[name=to]').value || song.measures);
       player = new SongPlayer(song, { onTick: (tk) => score.setCursor(tk), onEnd: () => setTimeout(finish, 400) });
-      player.play({ from: (f - 1) * tpm, to: to * tpm, speed: +q('[name=speed]').value, melody: false, bass: !bassOnly, metronome: true, countIn: true });
+      player.play({ from: (f - 1) * tpm, to: to * tpm, speed: +q('[name=speed]').value, melody: false, bass: false, metronome: q('[name=metro]').checked, countIn: true });
       rhythmTimer = setInterval(rhythmWatch, 50);
       feedback('Un compás de cuenta y arrancas', 'ok');
     }

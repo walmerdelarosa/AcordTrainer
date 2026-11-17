@@ -1,6 +1,7 @@
 {
-  "name": "AcorTrainer — Escuela de acordeón vallenato",
-  "short_name": "AcorTrainer",
+  "name": "AcordTrainer — Escuela de acordeón vallenato",
+  "short_name": "AcordTrainer",
+  "description": "Escuela de acordeón vallenato. Creado por Walmer De la Rosa Guerrero.",
   "lang": "es-CO",
   "start_url": "./",
   "scope": "./",

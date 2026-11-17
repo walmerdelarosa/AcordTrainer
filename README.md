@@ -1,4 +1,6 @@
-# AcorTrainer
+# AcordTrainer
+
+Creado por **Walmer De la Rosa Guerrero**.
 
 Aplicación web para aprender **acordeón diatónico colombiano** (vallenato) desde cero. Funciona en el navegador, sin instalación y sin servidor: se publica tal cual en GitHub Pages.
 
@@ -83,3 +85,7 @@ node tools/test-model.mjs                    # botones, afinaciones, teoría, te
 node tools/eval-pitch.mjs --algo salience    # precisión del detector con señales sintéticas
 node tools/eval-pitch.mjs --algo yin
 ```
+
+## Autor
+
+Creado por **Walmer De la Rosa Guerrero**.

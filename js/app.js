@@ -10,6 +10,8 @@ import { createSurface } from './surface.js';
 import { mountSongPanel } from './songview.js';
 import { listSongs, getSong, deleteSong } from './library.js';
 import { icon } from './icons.js';
+import { ctrl } from './controller.js';
+import { mountRails } from './rails.js';
 
 // ---------- Estado persistente (best effort) ----------
 const store = {
@@ -38,6 +40,7 @@ function renderTuningSelect() {
   sel.onchange = () => {
     state.tuning = getTuning(sel.value);
     store.set('tuning', sel.value);
+    ctrl.setTuning(state.tuning);
     route();
   };
 }
@@ -70,8 +73,8 @@ export function exerciseCard(ex, { compact = false } = {}) {
     if (stop) { stop(); stop = null; kb.mark(marksFor(ex)); $('.play', card).innerHTML = `${icon('play')} Escuchar`; return; }
     $('.play', card).innerHTML = `${icon('stop')} Detener`;
     stop = playSequence(ex.midis, { bpm: +bpm.value,
-      onStep: (i) => kb.mark(marksFor(ex, i)),
-      onEnd: () => { stop = null; kb.mark(marksFor(ex)); $('.play', card).innerHTML = `${icon('play')} Escuchar`; } });
+      onStep: (i) => { kb.mark(marksFor(ex, i)); const p = ex.positions[i]; ctrl.mark(p ? [{ btnId: p.btn.id, dir: p.dir, label: '●', active: true }] : []); },
+      onEnd: () => { stop = null; kb.mark(marksFor(ex)); ctrl.mark([]); $('.play', card).innerHTML = `${icon('play')} Escuchar`; } });
   };
   $('.practice', card).onclick = () => { state.exercise = ex; state.song = null; location.hash = '#/practicar'; };
   return card;
@@ -265,7 +268,8 @@ function viewSong(main, id) {
 }
 
 function viewAbout(main) {
-  main.append(h(`<article class="lesson card"><h1>Acerca de AcorTrainer</h1>
+  main.append(h(`<article class="lesson card"><h1>Acerca de AcordTrainer</h1>
+    <p class="credit">Creado por <b>Walmer De la Rosa Guerrero</b>.</p>
     <p>Una escuela de acordeón diatónico colombiano que cabe en el navegador. El mapa de botones parte de Cinco Letras y las demás afinaciones se calculan por transposición.</p>
     <h3>Cómo funciona el análisis de videos</h3>
     <ul><li>La melodía se detecta con un método espectral que tolera caja, guacharaca y bajos.</li>
@@ -298,6 +302,7 @@ const exerciseFactory = { scaleExercise, chordExercise, intervalExercise, rowTon
 function route() {
   state.cleanup.forEach((fn) => { try { fn(); } catch { /* */ } });
   state.cleanup = [];
+  ctrl.mark([]);
   const main = $('#main');
   main.innerHTML = '';
   const hash = location.hash || '#/';
@@ -315,6 +320,8 @@ function route() {
 
 window.addEventListener('hashchange', route);
 document.addEventListener('pointerdown', () => audioCtx(), { once: true });
+ctrl.init(state.tuning);
+mountRails();
 renderTuningSelect();
 route();
 if ('serviceWorker' in navigator && location.protocol === 'https:') {

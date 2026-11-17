@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>AcorTrainer — Escuela de acordeón vallenato</title>
+  <title>AcordTrainer — Escuela de acordeón vallenato</title>
+  <meta name="author" content="Walmer De la Rosa Guerrero">
   <meta name="description" content="Aprende acordeón vallenato desde cero: teoría en tu afinación, botonera con sonido, tu teclado de PC como acordeón y canciones sacadas de un video, con partitura y tablatura.">
   <meta name="theme-color" content="#17130f">
   <link rel="manifest" href="manifest.webmanifest">
@@ -17,10 +18,14 @@
 <body>
   <header class="top">
     <div class="top-inner">
-      <a class="brand" href="#/" aria-label="AcorTrainer, inicio">
+      <a class="brand" href="#/" aria-label="AcordTrainer, inicio">
         <svg viewBox="0 0 40 40" width="34" height="34" aria-hidden="true"><rect x="3" y="7" width="11" height="26" rx="2" fill="#f3e9d2"/><path d="M15 9l3-3 3 3v22l-3 3-3-3zM21 9l3-3 3 3v22l-3 3-3-3z" fill="#f2b705"/><path d="M27 9l3-3 3 3v22l-3 3-3-3z" fill="#c8102e"/><circle cx="8.5" cy="13" r="2" fill="#17130f"/><circle cx="8.5" cy="20" r="2" fill="#17130f"/><circle cx="8.5" cy="27" r="2" fill="#17130f"/></svg>
-        <span>Acor<b>Trainer</b></span>
+        <span>Acord<b>Trainer</b></span>
       </a>
+      <div class="rail-toggles" role="group" aria-label="Botoneras a los costados">
+        <button class="btn ghost xs" data-rail="left" aria-pressed="true">Pitos</button>
+        <button class="btn ghost xs" data-rail="right" aria-pressed="true">Bajos</button>
+      </div>
       <label class="tuning"><span>Afinación</span> <select id="tuning" aria-label="Afinación del acordeón"></select></label>
       <nav class="tabs" aria-label="Secciones">
         <a href="#/" data-tab="aprender">Aprender</a>
@@ -34,10 +39,15 @@
     </div>
   </header>
   <div class="vueltiao" aria-hidden="true"></div>
+  <aside class="rail rail-left" id="rail-left" aria-label="Pitos (mano derecha)"></aside>
+  <aside class="rail rail-right" id="rail-right" aria-label="Bajos (mano izquierda)"></aside>
   <main id="main"></main>
+  <button class="rail-fab btn accent" id="rail-fab" type="button" aria-controls="rail-sheet">Botonera</button>
+  <div class="rail-sheet" id="rail-sheet" hidden></div>
   <footer class="foot">
     <div class="tricolor" aria-hidden="true"><span></span><span></span><span></span></div>
-    <p>Hecho en Colombia para aprender acordeón botón a botón. Funciona sin conexión una vez cargado.</p>
+    <p><b>AcordTrainer</b> · Creado por <b>Walmer De la Rosa Guerrero</b></p>
+    <p class="small">Hecho en Colombia para aprender acordeón botón a botón. Funciona sin conexión una vez cargado.</p>
   </footer>
   <noscript>Esta aplicación necesita JavaScript.</noscript>
   <script type="module" src="js/app.js"></script>

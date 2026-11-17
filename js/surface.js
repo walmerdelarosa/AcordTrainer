@@ -1,27 +1,10 @@
-// Superficie para tocar: teclado en pantalla + teclado del PC + sonido sostenido + fuelle.
+// Botonera grande de página (Botonera y Practicar). El sonido, el fuelle y el teclado del PC
+// los maneja el instrumento global (controller.js); esto es la vista y sus opciones.
 import { createKeyboard } from './keyboard.js';
-import { attachKeys, hintsFor, LAYOUTS } from './pckeys.js';
-import { noteOn, noteOff, allNotesOff } from './audio.js';
-import { buttons, bassButtons, bassNumber } from './instrument.js';
+import { LAYOUTS } from './pckeys.js';
+import { ctrl, prefs } from './controller.js';
 
-const store = {
-  get(k, d) { try { const v = localStorage.getItem('acordeon:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem('acordeon:' + k, JSON.stringify(v)); } catch { /* */ } },
-};
-const finePointer = () => window.matchMedia?.('(pointer: fine)').matches;
-
-/**
- * onNote({ btn, dir, midi, bass, source }) se llama en cada ataque (también al cambiar el fuelle
- * con botones sostenidos, porque la nota cambia). sound=false para no sonar (p. ej. con micrófono).
- */
-export function createSurface(root, { tuning, onNote, onRelease, sound = true, compact = false } = {}) {
-  const prefs = {
-    orientation: store.get('kb.orientation', finePointer() ? 'horizontal' : 'vertical'),
-    layout: store.get('kb.layout', 'latam'),
-    mirror: store.get('kb.mirror', false),
-    bellowsMode: store.get('kb.bellows', 'hold'),
-    hints: store.get('kb.hints', finePointer()),
-  };
+export function createSurface(root, { tuning, onNote, compact = false } = {}) {
   root.innerHTML = `
     <div class="surface">
       <div class="surface-ctrls">
@@ -38,69 +21,30 @@ export function createSurface(root, { tuning, onNote, onRelease, sound = true, c
       </div>
       <div class="kb-wrap"></div>
       <button class="bellows-bar push" type="button" aria-live="polite">
-        <span class="bb-key">ESPACIO</span><span class="bb-state">Cerrando</span><span class="bb-help">mantén para abrir</span>
+        <span class="bb-key">ESPACIO</span><span class="bb-state">Cerrando</span><span class="bb-help"></span>
       </button>
       <p class="muted small kb-help"></p>
     </div>`;
   const q = (s) => root.querySelector(s);
-  let dir = 'push';
-  const heldBtns = new Map(); // id → { btn, bass }
-  const byId = () => Object.fromEntries([...buttons(tuning).map((b) => [b.id, b]), ...bassButtons(tuning).map((b) => [b.id, { ...b, bass: true }])]);
-  let ids = byId();
-
   const kb = createKeyboard(q('.kb-wrap'), {
-    tuning, mode: dir, orientation: prefs.orientation, mirror: prefs.mirror,
-    hints: prefs.hints ? hintsFor(prefs) : null,
-    onPress: (b, d) => { if (kb.mode === 'both') setDir(d); start(b.id, 'pantalla'); },
-    onRelease: (b) => stop(b.id),
+    tuning, mode: ctrl.dir, orientation: prefs.orientation, mirror: prefs.mirror, hints: ctrl.hints(),
+    onPress: (b, d) => { if (kb.mode === 'both') ctrl.setDir(d); ctrl.press(b.id, 'pantalla'); },
+    onRelease: (b) => ctrl.release(b.id),
   });
+  const unreg = ctrl.register(kb);
 
-  const midiOf = (b, d) => (b.bass ? (b.kind === 'bajo' ? 36 + b[d] : 48 + b[d]) : b[d]);
-  function start(id, source) {
-    const b = ids[id]; if (!b) return;
-    heldBtns.set(id, b);
-    const midi = midiOf(b, dir);
-    if (sound) {
-      if (b.bass && b.kind === 'acorde') { noteOn(id, midi, { bass: true, chord: true, gain: 0.22 }); noteOn(id + 'c3', midi + 4, { bass: true, chord: true, gain: 0.18 }); noteOn(id + 'c5', midi + 7, { bass: true, chord: true, gain: 0.18 }); }
-      else noteOn(id, midi, { bass: !!b.bass });
-    }
-    kb.press(id, true);
-    onNote && onNote({ btn: b, dir, midi, bass: !!b.bass, source });
-  }
-  function stop(id) {
-    const b = heldBtns.get(id); if (!b) return;
-    heldBtns.delete(id);
-    if (sound) { noteOff(id); noteOff(id + 'c3'); noteOff(id + 'c5'); }
-    kb.press(id, false);
-    onRelease && onRelease({ btn: b });
-  }
-  function setDir(d) {
-    if (d === dir) return;
-    dir = d;
-    const bar = q('.bellows-bar');
+  const bar = q('.bellows-bar');
+  const showDir = (d) => {
     bar.classList.toggle('pull', d === 'pull'); bar.classList.toggle('push', d === 'push');
     q('.bb-state').textContent = d === 'push' ? 'Cerrando' : 'Abriendo';
-    if (kb.mode !== 'both') kb.setMode(d);
-    // Botones sostenidos: al invertir el fuelle cambia la nota (instrumento bisonoro)
-    for (const id of [...heldBtns.keys()]) { const b = heldBtns.get(id); heldBtns.delete(id); start(id, 'fuelle'); if (!heldBtns.has(id)) heldBtns.set(id, b); }
-  }
+  };
+  showDir(ctrl.dir);
+  const offDir = ctrl.onDir(showDir);
+  bar.addEventListener('pointerdown', (e) => { e.preventDefault(); bar.setPointerCapture?.(e.pointerId); ctrl.bellowsDown(); });
+  bar.addEventListener('pointerup', () => ctrl.bellowsUp());
+  bar.addEventListener('pointercancel', () => ctrl.bellowsUp());
 
-  // Barra de fuelle: también sirve en pantallas táctiles (mantener = abrir)
-  const bar = q('.bellows-bar');
-  bar.addEventListener('pointerdown', (e) => { e.preventDefault(); bar.setPointerCapture?.(e.pointerId); setDir(prefs.bellowsMode === 'toggle' ? (dir === 'push' ? 'pull' : 'push') : 'pull'); });
-  bar.addEventListener('pointerup', () => { if (prefs.bellowsMode === 'hold') setDir('push'); });
-  bar.addEventListener('pointercancel', () => { if (prefs.bellowsMode === 'hold') setDir('push'); });
-
-  let keys = null;
-  function attach() {
-    keys?.detach();
-    keys = attachKeys({
-      down: (ref) => start(ref.id, 'teclado'),
-      up: (ref) => stop(ref.id),
-      bellows: (d) => setDir(d),
-    }, { mirror: prefs.mirror, bellowsMode: prefs.bellowsMode });
-  }
-  attach();
+  const offNote = onNote ? ctrl.onNote(onNote) : () => {};
 
   function syncUi() {
     root.querySelectorAll('[data-o]').forEach((b) => b.classList.toggle('on', b.dataset.o === prefs.orientation));
@@ -109,30 +53,21 @@ export function createSurface(root, { tuning, onNote, onRelease, sound = true, c
     q('[name=mirror]').checked = prefs.mirror;
     q('[name=bellows]').value = prefs.bellowsMode;
     q('.bb-help').textContent = prefs.bellowsMode === 'hold' ? 'mantén para abrir' : 'toca para cambiar';
-    q('.kb-help').innerHTML = finePointer()
-      ? `Teclado del PC: fila <b>Q</b> = afuera, fila <b>A</b> = medio, fila <b>Z</b> = adentro, números = bajos. La mano izquierda maneja el fuelle con la <b>barra espaciadora</b>, como en el acordeón.`
-      : 'Toca los botones; mantén presionada la barra de fuelle para abrir.';
+    q('.kb-help').innerHTML = `Teclado del PC: fila <b>Q</b> = afuera, fila <b>A</b> = medio, fila <b>Z</b> = adentro, números = bajos. La mano izquierda maneja el fuelle con la <b>barra espaciadora</b>, como en el acordeón. Funciona en cualquier página.`;
+    kb.setOptions({ orientation: prefs.orientation, mirror: prefs.mirror, hints: ctrl.hints() });
   }
-  function applyPrefs() {
-    Object.entries({ orientation: 'kb.orientation', layout: 'kb.layout', mirror: 'kb.mirror', bellowsMode: 'kb.bellows', hints: 'kb.hints' }).forEach(([k, s]) => store.set(s, prefs[k]));
-    kb.setOptions({ orientation: prefs.orientation, mirror: prefs.mirror, hints: prefs.hints ? hintsFor(prefs) : null });
-    attach(); syncUi();
-  }
-  root.querySelectorAll('[data-o]').forEach((b) => b.onclick = () => { prefs.orientation = b.dataset.o; applyPrefs(); });
-  q('[name=layout]').onchange = (e) => { prefs.layout = e.target.value; applyPrefs(); };
-  q('[name=hints]').onchange = (e) => { prefs.hints = e.target.checked; applyPrefs(); };
-  q('[name=mirror]').onchange = (e) => { prefs.mirror = e.target.checked; applyPrefs(); };
-  q('[name=bellows]').onchange = (e) => { prefs.bellowsMode = e.target.value; applyPrefs(); };
+  const offPrefs = ctrl.onPrefs(syncUi);
+  root.querySelectorAll('[data-o]').forEach((b) => b.onclick = () => ctrl.setPrefs({ orientation: b.dataset.o }));
+  q('[name=layout]').onchange = (e) => ctrl.setPrefs({ layout: e.target.value });
+  q('[name=hints]').onchange = (e) => ctrl.setPrefs({ hints: e.target.checked });
+  q('[name=mirror]').onchange = (e) => ctrl.setPrefs({ mirror: e.target.checked });
+  q('[name=bellows]').onchange = (e) => ctrl.setPrefs({ bellowsMode: e.target.value });
   if (compact) q('.surface-ctrls').classList.add('compact');
   syncUi();
 
   return {
     kb,
-    get dir() { return dir; },
-    setDir,
-    setTuning(t) { tuning = t; ids = byId(); kb.setTuning(t); },
-    destroy() { keys?.detach(); allNotesOff(); },
+    get dir() { return ctrl.dir; },
+    destroy() { unreg(); offDir(); offNote(); offPrefs(); },
   };
 }
-
-export { bassNumber };

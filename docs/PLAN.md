@@ -1,4 +1,6 @@
-# Plan del proyecto
+# Plan del proyecto — AcordTrainer
+
+Creado por Walmer De la Rosa Guerrero.
 
 ## Alcance
 

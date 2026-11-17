@@ -24,6 +24,12 @@ function geometryVertical(btns, showBass) {
   return { pos, bass, w: showBass ? 340 : 200, h: 618, body: { x: 14, y: 8, w: 172, h: 600 }, bassBody: showBass ? { x: 206, y: 90, w: 120, h: 360 } : null };
 }
 
+function geometryBassOnly() {
+  const bass = {};
+  for (const b of bassButtons({ offset: 0 })) bass[b.id] = { x: 36 + b.col * 50, y: 40 + b.row * 54 };
+  return { pos: {}, bass, w: 122, h: 340, body: null, bassBody: { x: 6, y: 10, w: 110, h: 322 } };
+}
+
 function geometryHorizontal(btns, showBass, mirror) {
   const step = 52, x0 = 60, rowY = { afuera: 98, medio: 150, adentro: 202 }, off = { afuera: 0, medio: -step / 2, adentro: 0 };
   const pos = {};
@@ -47,6 +53,7 @@ export function createKeyboard(container, opts = {}) {
     mode: opts.mode || 'push',       // 'push' | 'pull' | 'both'
     lang: opts.lang || 'es',
     showBass: opts.showBass !== false,
+    part: opts.part || 'both',       // 'both' | 'treble' | 'bass'
     orientation: opts.orientation || 'vertical',
     mirror: !!opts.mirror,
     hints: opts.hints || null,      // { btnId: 'Q', ... }
@@ -64,19 +71,22 @@ export function createKeyboard(container, opts = {}) {
     svg.innerHTML = '';
     const t = state.tuning;
     const btns = buttons(t);
-    const geo = state.orientation === 'horizontal' ? geometryHorizontal(btns, state.showBass, state.mirror) : geometryVertical(btns, state.showBass);
+    const bassOnly = state.part === 'bass';
+    const showBass = state.part === 'treble' ? false : state.showBass;
+    const geo = bassOnly ? geometryBassOnly()
+      : state.orientation === 'horizontal' ? geometryHorizontal(btns, showBass, state.mirror) : geometryVertical(btns, showBass);
     svg.setAttribute('viewBox', `0 0 ${geo.w} ${geo.h}`);
     container.classList.toggle('horizontal', state.orientation === 'horizontal');
-    el('rect', { x: geo.body.x, y: geo.body.y, width: geo.body.w, height: geo.body.h, rx: 16, class: 'kb-body' }, svg);
+    if (geo.body) el('rect', { x: geo.body.x, y: geo.body.y, width: geo.body.w, height: geo.body.h, rx: 16, class: 'kb-body' }, svg);
     if (geo.bassBody) el('rect', { x: geo.bassBody.x, y: geo.bassBody.y, width: geo.bassBody.w, height: geo.bassBody.h, rx: state.orientation === 'horizontal' ? 12 : 40, class: 'kb-body bass' }, svg);
-    if (state.orientation === 'vertical') {
+    if (bassOnly) { /* sin rótulos */ } else if (state.orientation === 'vertical') {
       [['Afuera', 46], ['Medio', 100], ['Adentro', 154]].forEach(([l, x]) => el('text', { x, y: 614, class: 'kb-rowlabel', 'text-anchor': 'middle' }, svg, l));
-      if (state.showBass) el('text', { x: 266, y: 80, class: 'kb-rowlabel', 'text-anchor': 'middle' }, svg, 'Bajos');
+      if (showBass) el('text', { x: 266, y: 80, class: 'kb-rowlabel', 'text-anchor': 'middle' }, svg, 'Bajos');
     } else {
       [['afuera', 98], ['medio', 150], ['adentro', 202]].forEach(([l, y]) => el('text', { x: state.mirror ? 620 : 20, y: y + 4, class: 'kb-rowlabel', 'text-anchor': 'middle' }, svg, l.slice(0, 2)));
     }
 
-    for (const b of btns) {
+    for (const b of bassOnly ? [] : btns) {
       const { x: cx, y: cy } = geo.pos[b.id];
       const g = el('g', { class: 'kb-btn' + (b.aux ? ' aux' : '') + (state.pressed.has(b.id) ? ' pressed' : ''), 'data-id': b.id, tabindex: 0, role: 'button', 'aria-label': `${b.row} ${b.index}` }, svg);
       const markPush = state.marks.get(`${b.id}:push`), markPull = state.marks.get(`${b.id}:pull`);
@@ -102,10 +112,10 @@ export function createKeyboard(container, opts = {}) {
       bindPress(g, b, cy);
     }
 
-    if (state.showBass) {
+    if (showBass || bassOnly) {
       for (const b of bassButtons(t)) {
         const { x: cx, y: cy } = geo.bass[b.id];
-        const r = state.orientation === 'horizontal' ? 17 : 20;
+        const r = bassOnly ? 21 : state.orientation === 'horizontal' ? 17 : 20;
         const dir = state.mode === 'pull' ? 'pull' : 'push';
         const g = el('g', { class: 'kb-btn bass ' + b.kind + (state.pressed.has(b.id) ? ' pressed' : ''), 'data-id': b.id }, svg);
         const bm = state.marks.get(`${b.id}:push`) || state.marks.get(`${b.id}:pull`);

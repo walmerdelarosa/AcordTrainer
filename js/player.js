@@ -9,7 +9,7 @@ export class SongPlayer {
     this.onTick = onTick || (() => {});
     this.onEnd = onEnd || (() => {});
     this.playing = false;
-    this.opts = { speed: 1, metronome: true, melody: true, bass: true, loop: false, countIn: true };
+    this.opts = { speed: 1, metronome: false, melody: true, bass: false, loop: false, countIn: true };
   }
 
   get tickDur() {

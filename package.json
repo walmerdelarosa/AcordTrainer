@@ -1,9 +1,10 @@
 {
-  "name": "acortrainer",
+  "name": "acordtrainer",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Aprende acordeón diatónico colombiano desde cero",
+  "author": "Walmer De la Rosa Guerrero",
   "scripts": {
     "start": "python3 -m http.server 8000",
     "test": "node tools/test-model.mjs",

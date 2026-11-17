@@ -1,4 +1,4 @@
-/* AcorTrainer — identidad: caña flecha (crema y negro del sombrero vueltiao),
+/* AcordTrainer — identidad: caña flecha (crema y negro del sombrero vueltiao),
    amarillo, azul y rojo usados con medida, tipografía de cartel. */
 :root {
   --negro: #17130f;
@@ -284,3 +284,48 @@ video { width: 100%; max-height: 52vh; background: #000; border-radius: 8px; bor
   .bellows-bar { position: sticky; bottom: max(8px, env(safe-area-inset-bottom)); z-index: 15; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ---------- Botoneras a los costados ---------- */
+:root { --rail-l: 176px; --rail-r: 132px; --top-h: 110px; }
+.rail-toggles { display: none; gap: .3rem; }
+.rail-toggles .btn { background: transparent; color: var(--crema); border-color: var(--crema); box-shadow: none; }
+.rail-toggles .btn.on { background: var(--amarillo); color: var(--negro); border-color: var(--amarillo); }
+.rail { display: none; position: fixed; top: var(--top-h); bottom: 0; z-index: 10; background: var(--negro); color: var(--crema); flex-direction: column; padding: .4rem .35rem .5rem; border-top: 3px solid var(--negro); }
+.rail-left { left: 0; width: var(--rail-l); }
+.rail-right { right: 0; width: var(--rail-r); }
+.rail header { display: flex; flex-direction: column; align-items: center; line-height: 1.1; padding: .1rem 0 .35rem; }
+.rail header b { font-family: var(--display); font-weight: 400; font-size: 1.05rem; color: var(--amarillo); }
+.rail header .muted { color: #cbbd9f; font-size: .72rem; }
+.rail-kb { flex: 1; min-height: 0; display: flex; justify-content: center; }
+.rail-kb .kb-wrap, .rail-kb > div { height: 100%; }
+.rail .kb, .rail-sheet .kb { height: 100%; width: auto; max-width: 100%; min-width: 0; }
+.rail .kb-body { fill: #2a221a; }
+.rail .kb-rowlabel { fill: #cbbd9f; }
+.rail-bellows { margin-top: .5rem; border: 2px solid var(--crema); border-radius: 8px; color: #fff; font: inherit; font-weight: 700; padding: .55rem .3rem; cursor: pointer; display: flex; flex-direction: column; align-items: center; touch-action: none; user-select: none; }
+.rail-bellows .k { font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; opacity: .85; }
+.rail-bellows .st { font-family: var(--display); font-weight: 400; font-size: 1.05rem; }
+.rail-bellows.push { background: var(--push); } .rail-bellows.pull { background: var(--pull); }
+.rail-fab { position: fixed; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 30; }
+.rail-fab.on { background: var(--negro); color: var(--crema); }
+.rail-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 29; height: min(78vh, 640px); background: var(--negro); border-top: 4px solid var(--amarillo); padding: .6rem .8rem calc(4.2rem + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: .5rem; }
+.rail-sheet[hidden] { display: none; }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; }
+.sheet-head .btn.ghost { background: transparent; color: var(--crema); border-color: var(--crema); box-shadow: none; }
+.sheet-head .btn.on { background: var(--amarillo); color: var(--negro); border-color: var(--amarillo); }
+.sheet-kb { flex: 1; min-height: 0; display: flex; justify-content: center; }
+.sheet-kb[hidden] { display: none; }
+.sheet-kb > div { height: 100%; }
+.rail-sheet .rail-bellows { flex-direction: row; justify-content: center; gap: .5rem; }
+.foot .small { opacity: .8; }
+.credit { color: var(--tierra); }
+@media (min-width: 1180px) {
+  .rail-toggles { display: inline-flex; }
+  .rail-fab, .rail-sheet { display: none !important; }
+  body.rail-left-on .rail-left, body.rail-right-on .rail-right { display: flex; }
+  body.rail-left-on main, body.rail-left-on .foot { margin-left: var(--rail-l); }
+  body.rail-right-on main, body.rail-right-on .foot { margin-right: var(--rail-r); }
+  body.rail-left-on main, body.rail-right-on main { max-width: none; width: auto; }
+  body.rail-left-on.rail-right-on main { padding-left: 1.6rem; padding-right: 1.6rem; }
+}
+.rail-kb, .sheet-kb { align-items: flex-start; }
+.rail-sheet .rail-bellows .muted { color: #fff; opacity: .85; }

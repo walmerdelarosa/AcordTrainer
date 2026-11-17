@@ -1,10 +1,10 @@
 // Modo sin conexión: guarda la app y la sirve desde caché; se actualiza en segundo plano.
-const VERSION = 'acortrainer-v5';
+const VERSION = 'acordtrainer-v6';
 const FILES = [
   './', 'index.html', 'css/styles.css', 'icon.svg', 'manifest.webmanifest',
   'js/app.js', 'js/theory.js', 'js/instrument.js', 'js/exercises.js', 'js/lessons.js', 'js/resources.js',
   'js/keyboard.js', 'js/audio.js', 'js/practice.js', 'js/video.js', 'js/surface.js', 'js/pckeys.js',
-  'js/notation.js', 'js/player.js', 'js/rhythm.js', 'js/reed.js', 'js/song.js', 'js/songview.js', 'js/library.js', 'js/icons.js',
+  'js/notation.js', 'js/player.js', 'js/rhythm.js', 'js/reed.js', 'js/controller.js', 'js/rails.js', 'js/song.js', 'js/songview.js', 'js/library.js', 'js/icons.js',
   'js/pitch/yin.js', 'js/pitch/salience.js', 'js/pitch/tracker.js', 'js/pitch/bass.js',
 ];
 
