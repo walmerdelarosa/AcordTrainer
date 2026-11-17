@@ -1,0 +1,11 @@
+{
+  "name": "AcorTrainer — Escuela de acordeón vallenato",
+  "short_name": "AcorTrainer",
+  "lang": "es-CO",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3e9d2",
+  "theme_color": "#17130f",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

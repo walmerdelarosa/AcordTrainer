@@ -9,6 +9,10 @@
 | 2. Micrófono | ✅ base | Práctica guiada con detección de notas y afinador. |
 | 3. Video | ✅ base | Extracción de melodía, botón + fuelle, sincronía, velocidad, bucle A–B, CSV. |
 | Cámara | ❌ descartada | — |
+| 4. Mano izquierda | ✅ base | Detección de bajo/acorde; el fuelle compartido corrige la digitación de la melodía. |
+| 5. Canción | ✅ base | Tempo, cuantización, partitura + tablatura con reproducción, edición, MusicXML/MIDI/CSV, biblioteca local. |
+| 6. Teclado de PC | ✅ | QWERTY como botonera, espacio = fuelle, bajos en la fila de números. |
+| 7. Práctica con ritmo | ✅ base | Metrónomo de guacharaca, bajos de acompañamiento, medición adelantado/atrasado. |
 
 ## Decisiones de diseño
 
@@ -16,7 +20,10 @@
 2. **Botones auxiliares por clase de nota.** El método de referencia usa el primer botón de cada hilera en cualquier octava (p. ej. el Si de Do mayor y el de la cromática de Do, una octava más arriba). La digitación los acepta así.
 3. **Digitación = camino de menor costo (Viterbi).** Se penaliza cambiar el fuelle (más que cambiar de hilera, como hace el método de referencia), saltar botones y usar auxiliares. Coincide con el método de referencia en Do mayor y en las escalas por hilera, pero en la cromática de Do solo en 7 de 13 notas (elige menos cambios de fuelle). Es una sugerencia, no una regla.
 4. **Comparación por clase de nota.** Muchos acordeones tienen una lengüeta una octava abajo; el detector "oye" esa octava, y eso es físicamente correcto. La app compara la clase de nota (Do, Re…) y la lleva a la octava disponible en el teclado.
-5. **Todo en el dispositivo.** Sin servidor: privacidad (importante si hay menores usando el micrófono) y hosting gratis en GitHub Pages.
+5. **Fuelle único.** Los bajos también son bisonoros: si el bajo que suena solo existe abriendo (o cerrando), la melodía tiene que ir en la misma dirección. El análisis usa esa pista al digitar.
+6. **Tablatura propia.** Tres líneas (una por hilera) con el número de botón, carril de fuelle y carril de bajos. En MusicXML va como letra bajo las notas, para que la lean los programas de partituras.
+7. **Teclado del PC.** Se usa la posición física de la tecla (funciona con distribución latinoamericana, de España o de EE. UU.). Las filas QWERTY son las hileras; la mano izquierda maneja el fuelle con el espacio.
+8. **Todo en el dispositivo.** Sin servidor: privacidad (importante si hay menores usando el micrófono) y hosting gratis en GitHub Pages.
 
 ## Motor de pitch: estado y cómo afinarlo
 
@@ -35,6 +42,10 @@ Resultados con señales sintéticas (`node tools/eval-pitch.mjs`), % de cuadros 
 | Conjunto + ruido 15 dB | 57.7 | 99.2 |
 | Conjunto + ruido 5 dB | 7.1 | 99.2 |
 
+Mano izquierda (eventos con tipo y nota correctos, progresión I–IV–V–I): **85 %** con bajos solos o con conjunto a 15 dB; **79 %** a 5 dB. La caja agrega ataques de más en la banda grave.
+
+Tempo: acierta entre 80 y 165 pulsos/min en pruebas sintéticas; puede confundir 3:2 a tempos extremos (≈180). El panel de canción tiene botones ×2, ÷2, ×1,5 y ÷1,5 para corregirlo.
+
 **Limitación importante:** las señales sintéticas no reemplazan grabaciones reales. Pasos para afinarlo de verdad:
 
 1. **Corpus etiquetado.** 20–30 fragmentos reales (videos de referencia, grabaciones propias) con las notas anotadas a mano (CSV: inicio, fin, nota). La app ya exporta CSV: se corrige el CSV y queda como referencia.
@@ -52,6 +63,8 @@ Resultados con señales sintéticas (`node tools/eval-pitch.mjs`), % de cuadros 
 - [ ] Unidad 6 (paseo, merengue, son, puya): compás, patrones de bajo, caja y guacharaca.
 
 ## Próximos pasos sugeridos
+
+0. Validar el análisis de bajos con grabaciones reales (en especial la calidad mayor/menor de los acordes).
 
 1. Probar con 3–5 videos reales de acordeoneros y revisar las notas detectadas.
 2. Agregar los 10 ejercicios técnicos del método como ejercicios interactivos (traslados, posiciones principales, agilidad).

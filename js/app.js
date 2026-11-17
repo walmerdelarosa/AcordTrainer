@@ -6,6 +6,10 @@ import { LESSONS, UNITS } from './lessons.js';
 import { scaleExercise, chordExercise, intervalExercise, marksFor, rowTonic } from './exercises.js';
 import { mountPractice } from './practice.js';
 import { mountVideo } from './video.js';
+import { createSurface } from './surface.js';
+import { mountSongPanel } from './songview.js';
+import { listSongs, getSong, deleteSong } from './library.js';
+import { icon } from './icons.js';
 
 // ---------- Estado persistente (best effort) ----------
 const store = {
@@ -17,6 +21,7 @@ export const state = {
   tuning: getTuning(store.get('tuning', 'cinco-letras')),
   done: new Set(store.get('done', [])),
   exercise: null, // ejercicio enviado a "Practicar"
+  song: null,     // canción abierta (análisis o biblioteca)
   cleanup: [],
 };
 
@@ -48,9 +53,9 @@ export function exerciseCard(ex, { compact = false } = {}) {
     }).join('')}</ol>
     ${ex.missing ? `<p class="warn">${ex.missing} nota(s) no existen en esta afinación con esta restricción.</p>` : ''}
     <div class="row-ctrls">
-      <button class="btn play">▶ Escuchar</button>
+      <button class="btn play">${icon('play')} Escuchar</button>
       <label class="bpm">Tempo <input type="range" min="40" max="160" value="80"> <span>80</span></label>
-      <button class="btn ghost practice">🎤 Practicar</button>
+      <button class="btn ghost practice">${icon('mic')} Practicar</button>
     </div>
     <div class="kb-wrap"></div>
     <p class="legend"><span class="dot push"></span> cerrando <span class="dot pull"></span> abriendo · los números son el orden</p>
@@ -62,13 +67,13 @@ export function exerciseCard(ex, { compact = false } = {}) {
   bpm.oninput = () => { $('.bpm span', card).textContent = bpm.value; };
   let stop = null;
   $('.play', card).onclick = () => {
-    if (stop) { stop(); stop = null; kb.mark(marksFor(ex)); $('.play', card).textContent = '▶ Escuchar'; return; }
-    $('.play', card).textContent = '■ Detener';
+    if (stop) { stop(); stop = null; kb.mark(marksFor(ex)); $('.play', card).innerHTML = `${icon('play')} Escuchar`; return; }
+    $('.play', card).innerHTML = `${icon('stop')} Detener`;
     stop = playSequence(ex.midis, { bpm: +bpm.value,
       onStep: (i) => kb.mark(marksFor(ex, i)),
-      onEnd: () => { stop = null; kb.mark(marksFor(ex)); $('.play', card).textContent = '▶ Escuchar'; } });
+      onEnd: () => { stop = null; kb.mark(marksFor(ex)); $('.play', card).innerHTML = `${icon('play')} Escuchar`; } });
   };
-  $('.practice', card).onclick = () => { state.exercise = ex; location.hash = '#/practicar'; };
+  $('.practice', card).onclick = () => { state.exercise = ex; state.song = null; location.hash = '#/practicar'; };
   return card;
 }
 
@@ -100,12 +105,12 @@ function renderWidget(w) {
       TUNINGS.map((x) => `<tr class="${x.id === t.id ? 'sel' : ''}"><td><b>${esc(x.name)}</b></td><td>${esc(x.rows)}<br><span class="muted">${esc(x.es)}</span></td><td>${x.group === 'fabrica' ? 'Fábrica' : 'Taller'}</td></tr>`).join('')}</table>
       <p class="muted">Las de taller se obtienen transportando una de fábrica. Información de referencia, por validar con un técnico.</p></section>`);
     case 'interval-demo': {
-      const c = h(`<section class="card"><div class="opts">${w.pairs.map(([n], i) => `<button class="btn ghost" data-i="${i}">▶ ${esc(n)}</button>`).join('')}</div></section>`);
+      const c = h(`<section class="card"><div class="opts">${w.pairs.map(([n], i) => `<button class="btn ghost" data-i="${i}">${icon('play')} ${esc(n)}</button>`).join('')}</div></section>`);
       c.querySelectorAll('button').forEach((b) => b.onclick = () => { const [, a, z] = w.pairs[+b.dataset.i]; playMidi(a, 0.5); playMidi(z, 0.5, { when: 0.55 }); });
       return c;
     }
     case 'progression': {
-      const c = h(`<section class="card"><p>${w.chords.map((r, i) => `<b>${['I', 'IV', 'V', 'I'][i]}</b> ${T.nameEs(r)}`).join(' → ')}</p><button class="btn">▶ Escuchar progresión</button></section>`);
+      const c = h(`<section class="card"><p>${w.chords.map((r, i) => `<b>${['I', 'IV', 'V', 'I'][i]}</b> ${T.nameEs(r)}`).join(' → ')}</p><button class="btn">${icon('play')} Escuchar progresión</button></section>`);
       $('button', c).onclick = () => w.chords.forEach((r, i) => setTimeout(() => {
         const base = 60 + ((T.pcOf(r) - 0 + 12) % 12);
         playChord(T.triad(r).map((n, k) => base + [0, 4, 7][k]), 0.9);
@@ -114,7 +119,7 @@ function renderWidget(w) {
       return c;
     }
     case 'toggle-accidentals': {
-      const c = h(`<section class="card"><p>Escucha: Do♯ y Re♭ son el mismo sonido.</p><button class="btn ghost">▶ Do♯</button> <button class="btn ghost">▶ Re♭</button></section>`);
+      const c = h(`<section class="card"><p>Escucha: Do♯ y Re♭ son el mismo sonido.</p><button class="btn ghost">${icon('play')} Do♯</button> <button class="btn ghost">${icon('play')} Re♭</button></section>`);
       c.querySelectorAll('button').forEach((b) => b.onclick = () => playMidi(61, 0.6));
       return c;
     }
@@ -126,15 +131,37 @@ function renderWidget(w) {
 function viewLearn(main) {
   const total = LESSONS.filter((l) => !l.draft).length;
   const done = LESSONS.filter((l) => state.done.has(l.id)).length;
-  main.append(h(`<section class="hero"><h1>Aprende acordeón vallenato desde cero</h1>
-    <p>Teoría con ejemplos en tu propia afinación, teclado con sonido, práctica con micrófono y análisis de videos. Todo funciona en tu navegador.</p>
-    <div class="progress"><div style="width:${(100 * done / total).toFixed(0)}%"></div></div><p class="muted">${done} de ${total} lecciones completadas</p></section>`));
+  main.append(h(`<section class="hero">
+    <div class="hero-text">
+      <p class="kicker">Escuela de acordeón vallenato</p>
+      <h1>Botón a botón, del cero a la parranda</h1>
+      <p>Teoría con ejemplos en tu propia afinación, la botonera con sonido, tu teclado de computador como acordeón y canciones que sacas de un video. Todo en el navegador, sin instalar nada.</p>
+      <div class="row-ctrls">
+        <a class="btn accent" href="#/leccion/${(LESSONS.find((l) => !state.done.has(l.id) && !l.draft) || LESSONS[0]).id}">${done ? 'Seguir donde iba' : 'Arrancar la primera lección'}</a>
+        <a class="btn ghost" href="#/teclado">${icon('keys')} Tocar con el teclado</a>
+        <a class="btn ghost" href="#/video">${icon('ear')} Sacar una canción</a>
+      </div>
+      <div class="progress" aria-label="Progreso"><div style="width:${(100 * done / total).toFixed(0)}%"></div></div>
+      <p class="muted small">${done} de ${total} lecciones completadas</p>
+    </div>
+    <div class="hero-art" aria-hidden="true">${ACCORDION_ART}</div>
+  </section>`));
   for (const u of UNITS) {
     const ls = LESSONS.filter((l) => l.unit === u.id);
-    main.append(h(`<section class="unit"><h2>Unidad ${u.id}. ${esc(u.title)}</h2><ol class="lessons">${ls.map((l) =>
+    main.append(h(`<section class="unit"><h2><span class="unit-n">${u.id}</span> ${esc(u.title)}</h2><ol class="lessons">${ls.map((l) =>
       `<li class="${state.done.has(l.id) ? 'done' : ''} ${l.draft ? 'draft' : ''}"><a href="#/leccion/${l.id}">${esc(l.title)}</a><span class="muted">${l.minutes} min${l.draft ? ' · en construcción' : ''}</span></li>`).join('')}</ol></section>`));
   }
 }
+
+// Acordeón ilustrado (original): fuelle con los colores de la bandera y teclado de botones.
+const ACCORDION_ART = `<svg viewBox="0 0 300 220" class="accordion-art">
+  <rect x="20" y="40" width="70" height="150" rx="10" class="acc-case"/>
+  ${[0, 1, 2].map((c) => [...Array(c === 1 ? 6 : 5)].map((_, i) => `<circle cx="${38 + c * 17}" cy="${(c === 1 ? 58 : 66) + i * 22}" r="6.5" class="acc-btn"/>`).join('')).join('')}
+  ${[...Array(9)].map((_, i) => `<path d="M${92 + i * 14} 46 l7 -8 l7 8 v136 l-7 8 l-7 -8 z" class="fold f${i % 3}"/>`).join('')}
+  <rect x="218" y="40" width="64" height="150" rx="10" class="acc-case"/>
+  ${[...Array(6)].map((_, i) => `<circle cx="240" cy="${66 + i * 22}" r="6" class="acc-btn b"/><circle cx="262" cy="${66 + i * 22}" r="6" class="acc-btn b"/>`).join('')}
+  <path d="M30 40 q 25 -26 55 0" class="strap"/>
+</svg>`;
 
 function viewLesson(main, id) {
   const idx = LESSONS.findIndex((l) => l.id === id);
@@ -160,7 +187,7 @@ function viewLesson(main, id) {
 
 function viewExplore(main) {
   const t = state.tuning;
-  const form = h(`<section class="card"><h1>Explorar escalas y acordes</h1>
+  const form = h(`<section class="card"><h1>Escalas y acordes</h1>
     <div class="form">
       <label>Tipo <select name="type">
         <option value="mayor">Escala mayor</option><option value="menor">Escala menor natural</option>
@@ -196,35 +223,61 @@ function viewExplore(main) {
 }
 
 function viewKeyboard(main) {
-  const c = h(`<section class="card"><h1>Teclado libre</h1>
-    <div class="row-ctrls"><span>Fuelle:</span>
-      <button class="btn ghost" data-m="push">Cerrando</button><button class="btn ghost" data-m="pull">Abriendo</button><button class="btn ghost" data-m="both">Ver ambos</button>
-      <span class="muted">Atajo: mantén la barra espaciadora para abrir.</span></div>
-    <div class="kb-wrap big"></div><p class="now muted">Toca un botón.</p></section>`);
-  main.append(c);
-  const kb = createKeyboard($('.kb-wrap', c), { tuning: state.tuning, mode: 'push', onPress: (b, dir) => {
-    if (b.bass) { playMidi(48 + b[dir], 0.6, { bass: true }); return; }
-    playMidi(b[dir], 0.5); kb.flash(b.id, dir);
-    $('.now', c).textContent = `${b.row} ${b.index} · ${dir === 'push' ? 'cerrando' : 'abriendo'} → ${T.midiName(b[dir], state.tuning.pref)}`;
+  main.append(h(`<header class="page-head"><h1>La botonera</h1>
+    <p>Toca con el mouse, con el dedo o con el <b>teclado del computador</b>: cada fila de letras es una hilera y la barra espaciadora es el fuelle. Mantén un botón y cambia el fuelle para oír cómo cambia la nota.</p></header>`));
+  const now = h('<p class="now-playing muted">Toca un botón.</p>');
+  const host = h('<div></div>');
+  main.append(host, now);
+  const s = createSurface(host, { tuning: state.tuning, onNote: (e) => {
+    const n = e.bass ? `${e.btn.kind === 'bajo' ? 'bajo' : 'acorde'} ${T.nameEs(T.spellPc(e.btn[e.dir], state.tuning.pref))}` : T.midiName(e.midi, state.tuning.pref);
+    now.innerHTML = `${e.bass ? 'Bajos' : `${esc(e.btn.row)} ${e.btn.index}`} · <span class="${e.dir}-t">${e.dir === 'push' ? 'cerrando' : 'abriendo'}</span> → <b>${esc(n)}</b>`;
   } });
-  const setMode = (m) => { kb.setMode(m); c.querySelectorAll('[data-m]').forEach((x) => x.classList.toggle('on', x.dataset.m === m)); };
-  c.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => setMode(b.dataset.m));
-  setMode('push');
-  const down = (e) => { if (e.code === 'Space' && !e.repeat && kb.mode === 'push') { e.preventDefault(); setMode('pull'); } };
-  const up = (e) => { if (e.code === 'Space' && kb.mode === 'pull') { e.preventDefault(); setMode('push'); } };
-  window.addEventListener('keydown', down); window.addEventListener('keyup', up);
-  state.cleanup.push(() => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); });
+  state.cleanup.push(() => s.destroy());
+}
+
+function viewSongs(main) {
+  const t = state.tuning;
+  const songs = listSongs();
+  main.append(h(`<header class="page-head"><h1>Mis canciones</h1>
+    <p>Las canciones que sacas de un video quedan guardadas aquí, en este navegador. Ábrelas para verlas en partitura y tablatura, practicarlas o descargarlas.</p>
+    <div class="row-ctrls"><a class="btn accent" href="#/video">${icon('ear')} Sacar una canción de un video</a></div></header>`));
+  const list = h(`<ul class="song-list">
+    <li><a href="#/cancion/demo-${t.id}"><b>Paseo de práctica</b> <span class="muted">ejemplo · ${esc(t.name)}</span></a></li>
+    ${songs.map((s) => `<li><a href="#/cancion/${s.id}"><b>${esc(s.title)}</b> <span class="muted">${esc(getTuning(s.tuningId).name)} · ${s.meter} · ${Math.round(s.bpm)} pulsos/min · ${s.notes.length} notas</span></a><button class="btn ghost xs del" data-id="${s.id}" title="Borrar">${icon('trash')}</button></li>`).join('')}
+  </ul>`);
+  list.querySelectorAll('.del').forEach((b) => b.onclick = () => { if (confirm('¿Borrar esta canción de este navegador?')) { deleteSong(b.dataset.id); route(); } });
+  main.append(list);
+  if (!songs.length) main.append(h('<p class="muted">Todavía no has guardado canciones.</p>'));
+}
+
+function viewSong(main, id) {
+  let song = state.song && state.song.id === id ? state.song : getSong(id, state.tuning.id);
+  if (!song) { main.append(h('<p>No encontré esa canción. <a href="#/canciones">Ver Mis canciones</a></p>')); return; }
+  if (song.tuningId !== state.tuning.id && !id.startsWith('demo')) {
+    main.append(h(`<p class="warn">Esta canción está digitada para ${esc(getTuning(song.tuningId).name)}. Cambia la afinación arriba para verla con los botones correctos.</p>`));
+  }
+  if (id.startsWith('demo') && song.tuningId !== state.tuning.id) song = getSong('demo-' + state.tuning.id);
+  state.song = song;
+  main.append(h(`<nav class="crumbs"><a href="#/canciones">Mis canciones</a> › ${esc(song.title)}</nav>`));
+  const host = h('<div></div>');
+  main.append(host);
+  mountSongPanel(host, song, { state, onSaved: (nid) => history.replaceState(null, '', '#/cancion/' + nid) });
 }
 
 function viewAbout(main) {
-  main.append(h(`<article class="lesson card"><h1>Acerca de</h1>
-    <p>Proyecto abierto para aprender acordeón diatónico colombiano. El mapa de botones parte de Cinco Letras; las demás afinaciones se calculan por transposición.</p>
+  main.append(h(`<article class="lesson card"><h1>Acerca de AcorTrainer</h1>
+    <p>Una escuela de acordeón diatónico colombiano que cabe en el navegador. El mapa de botones parte de Cinco Letras y las demás afinaciones se calculan por transposición.</p>
+    <h3>Cómo funciona el análisis de videos</h3>
+    <ul><li>La melodía se detecta con un método espectral que tolera caja, guacharaca y bajos.</li>
+      <li>La mano izquierda (bajo y acorde) se detecta aparte. Como el fuelle es uno solo, los bajos ayudan a decidir si la melodía va cerrando o abriendo.</li>
+      <li>El tempo sale de los golpes de los bajos y la melodía, y las notas se ajustan a la rejilla del compás.</li>
+      <li>El resultado se descarga en MusicXML (MuseScore, Finale, Sibelius, Dorico, Guitar Pro), MIDI o CSV.</li></ul>
     <h3>Qué falta validar</h3><ul>
       <li>Octava exacta de los botones auxiliares (el primero de cada hilera) y registro absoluto de cada afinación.</li>
-      <li>Calidad (mayor/menor) de los acordes de los bajos.</li>
+      <li>Calidad (mayor o menor) de los acordes de los bajos.</li>
       <li>Datos de las afinaciones de taller.</li>
-      <li>Digitaciones sugeridas frente a las del profesor.</li></ul>
-    <h3>Privacidad</h3><p>El micrófono y los videos se procesan en tu dispositivo. No se sube nada a ningún servidor.</p></article>`));
+      <li>Digitaciones sugeridas frente a las de un profesor.</li></ul>
+    <h3>Privacidad</h3><p>El micrófono y los videos se procesan en tu dispositivo. Nada se sube a ningún servidor; tus canciones quedan guardadas solo en este navegador.</p></article>`));
 }
 
 // ---------- Router ----------
@@ -233,6 +286,8 @@ const ROUTES = [
   [/^#\/leccion\/([\w-]+)$/, viewLesson, 'aprender'],
   [/^#\/explorar$/, viewExplore, 'explorar'],
   [/^#\/teclado$/, viewKeyboard, 'teclado'],
+  [/^#\/canciones$/, viewSongs, 'canciones'],
+  [/^#\/cancion\/([\w-]+)$/, viewSong, 'canciones'],
   [/^#\/practicar$/, (m) => mountPractice(m, state, exerciseFactory), 'practicar'],
   [/^#\/video$/, (m) => mountVideo(m, state), 'video'],
   [/^#\/acerca$/, viewAbout, 'acerca'],
@@ -262,3 +317,6 @@ window.addEventListener('hashchange', route);
 document.addEventListener('pointerdown', () => audioCtx(), { once: true });
 renderTuningSelect();
 route();
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(() => { /* sin modo sin conexión */ });
+}

@@ -106,8 +106,48 @@ export function bassButtons(tuning) {
   }));
 }
 
+/** Número de botón de bajo para la tablatura (1–12: columna de afuera 1–6, de adentro 7–12). */
+export const bassNumber = (b) => b.col * 6 + b.row + 1;
+
+/** Botones de bajo que producen un bajo/acorde con esa raíz. */
+export function bassPositions(tuning, kind, pc) {
+  const out = [];
+  for (const b of bassButtons(tuning)) {
+    if (b.kind !== kind) continue;
+    if (b.push === pc) out.push({ btn: b, dir: 'push' });
+    if (b.pull === pc) out.push({ btn: b, dir: 'pull' });
+  }
+  return out;
+}
+
+/**
+ * Direcciones del fuelle que impone cada evento de la mano izquierda.
+ * Devuelve para cada nota de melodía 'push' | 'pull' | null según el bajo que suena a la vez.
+ */
+export function bellowsHintsFromBass(tuning, melody, bassEvents) {
+  return melody.map((n) => {
+    const mid = (n.start + n.end) / 2;
+    const ev = bassEvents.find((e) => e.start <= mid && mid < e.end);
+    if (!ev) return null;
+    const dirs = new Set(bassPositions(tuning, ev.kind, ev.pc).map((p) => p.dir));
+    return dirs.size === 1 ? [...dirs][0] : null;
+  });
+}
+
+/** Asigna botón de bajo a cada evento, prefiriendo la dirección del fuelle de la melodía simultánea. */
+export function assignBass(tuning, bassEvents, melody) {
+  return bassEvents.map((e) => {
+    const cands = bassPositions(tuning, e.kind, e.pc);
+    const mid = e.start + 0.05;
+    const m = melody.find((n) => n.start <= mid && mid < n.end && n.pos);
+    const pick = cands.find((c) => m && c.dir === m.pos.dir) || cands[0] || null;
+    return { ...e, pos: pick };
+  });
+}
+
 export function buttonLabel(btn, dir, tuning, lang = 'es') {
-  const n = spellPc(midiToPc(dir === 'push' ? btn.push : btn.pull), tuning.pref);
+  // Los auxiliares se nombran con sostenidos, como en los gráficos de botones (Fa♯, no Sol♭)
+  const n = spellPc(midiToPc(dir === 'push' ? btn.push : btn.pull), btn.aux ? 'sharp' : tuning.pref);
   return lang === 'es' ? nameEs(n) : nameEn(n);
 }
 
@@ -141,7 +181,7 @@ export function positionsForPc(tuning, pc) {
 // ---------- Digitación ----------
 // Costo de pasar de una posición a otra. El método de referencia prioriza no cambiar el fuelle
 // (p. ej. Do mayor en Cinco Letras: 7 de 8 notas abriendo), y acepta cambiar de hilera.
-export const COST = { bellows: 2.0, row: 0.9, distance: 0.35, aux: 0.8, homeRow: 0.6 };
+export const COST = { bellows: 2.0, row: 0.9, distance: 0.35, aux: 0.8, homeRow: 0.6, dirHint: 3.0 };
 
 function stepCost(a, b) {
   if (!a) return 0;
@@ -155,9 +195,10 @@ function stepCost(a, b) {
 /**
  * Elige botón y fuelle para una secuencia de notas MIDI (Viterbi).
  * homeRow: hilera preferida. onlyRow: restringe a una hilera (ejercicios "por hilera").
+ * dirHints: dirección del fuelle sugerida por nota ('push' | 'pull' | null), p. ej. por los bajos.
  * Devuelve { positions, cost, missing }. positions[i] es null si la nota no existe.
  */
-export function fingerSequence(tuning, midis, { homeRow = null, onlyRow = null } = {}) {
+export function fingerSequence(tuning, midis, { homeRow = null, onlyRow = null, dirHints = null } = {}) {
   const cands = midis.map((m) =>
     positionsForMidi(tuning, m).filter((p) => !onlyRow || p.btn.row === onlyRow));
   const n = midis.length;
@@ -165,7 +206,8 @@ export function fingerSequence(tuning, midis, { homeRow = null, onlyRow = null }
   for (let i = 0; i < n; i++) {
     cost.push([]); back.push([]);
     cands[i].forEach((p, j) => {
-      const own = (p.btn.aux ? COST.aux : 0) + (homeRow && p.btn.row !== homeRow ? COST.homeRow : 0);
+      const own = (p.btn.aux ? COST.aux : 0) + (homeRow && p.btn.row !== homeRow ? COST.homeRow : 0)
+        + (dirHints && dirHints[i] && dirHints[i] !== p.dir ? COST.dirHint : 0);
       if (i === 0 || cands[i - 1].length === 0) { cost[i][j] = own; back[i][j] = -1; return; }
       let best = Infinity, arg = -1;
       cands[i - 1].forEach((q, k) => {

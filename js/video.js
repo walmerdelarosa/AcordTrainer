@@ -1,9 +1,12 @@
-// Aprender de un video: extrae la melodía del audio, la convierte en botones y fuelle,
-// y la muestra sincronizada con el video (velocidad y bucle A–B).
+// Aprender de un video o audio: melodía + mano izquierda → canción con tempo,
+// partitura y tablatura sincronizadas con el video, lista para practicar o exportar.
 import * as T from './theory.js';
-import { buttons, fingerSequence, ROWS } from './instrument.js';
-import { createKeyboard } from './keyboard.js';
+import { buttons } from './instrument.js';
 import { analyzeBuffer } from './pitch/tracker.js';
+import { analyzeBass } from './pitch/bass.js';
+import { songFromAnalysis } from './song.js';
+import { mountSongPanel } from './songview.js';
+import { icon } from './icons.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ANALYSIS_SR = 22050;
@@ -15,12 +18,12 @@ export function foldToInstrument(tuning, notes) {
     const pc = T.midiToPc(n.midi);
     let best = null;
     for (const m of avail) if (T.midiToPc(m) === pc && (best == null || Math.abs(m - n.midi) < Math.abs(best - n.midi))) best = m;
-    return { ...n, played: best ?? n.midi, folded: best !== n.midi };
+    return { ...n, midi: best ?? n.midi, heard: n.midi };
   });
 }
 
-/** Une notas repetidas separadas por huecos mínimos (artefactos del trémolo). */
-export function cleanNotes(notes, { minDur = 0.08, mergeGap = 0.03 } = {}) {
+/** Une notas repetidas separadas por huecos mínimos (artefactos del trémolo) y quita las muy cortas. */
+export function cleanNotes(notes, { minDur = 0.07, mergeGap = 0.03 } = {}) {
   const out = [];
   for (const n of notes) {
     const prev = out[out.length - 1];
@@ -33,86 +36,76 @@ export function cleanNotes(notes, { minDur = 0.08, mergeGap = 0.03 } = {}) {
 export function mountVideo(main, state) {
   const t = state.tuning;
   const root = document.createElement('section');
-  root.className = 'card video-view';
+  root.className = 'video-view';
   root.innerHTML = `
-    <h1>Aprender de un video</h1>
-    <p>Carga un video o audio de un acordeonero (de tu teléfono o computador). La app escucha la melodía, propone botón y fuelle para cada nota en tu afinación (<b>${esc(t.name)}</b>) y la sincroniza con el video.</p>
-    <p class="muted">Todo se procesa en tu dispositivo. Los enlaces de YouTube no se pueden analizar directamente: usa archivos propios o descargados.</p>
-    <div class="row-ctrls">
-      <label class="btn">📁 Elegir archivo<input type="file" accept="video/*,audio/*" hidden></label>
-      <label>Detector <select name="algo"><option value="salience">Espectral (con acompañamiento)</option><option value="yin">YIN (acordeón solo)</option></select></label>
-      <button class="btn analyze" disabled>Analizar</button>
-      <span class="status muted"></span>
-    </div>
-    <div class="bar" hidden><div></div></div>
-    <div class="video-grid" hidden>
-      <div>
-        <video controls playsinline></video>
-        <div class="row-ctrls">
-          <label>Velocidad <select name="rate"><option>0.5</option><option>0.75</option><option selected>1</option></select></label>
-          <button class="btn ghost setA">A</button><button class="btn ghost setB">B</button>
-          <label class="check"><input type="checkbox" name="loop"> Bucle A–B</label>
-          <span class="ab muted"></span>
-        </div>
-        <canvas class="roll" height="160"></canvas>
-        <div class="now-note"><span class="big-note">—</span><span class="where muted"></span></div>
-        <ol class="chips tab"></ol>
-        <div class="row-ctrls"><button class="btn ghost csv" disabled>⬇ Descargar notas (CSV)</button></div>
+    <header class="page-head">
+      <h1>Sácala de oído… con ayuda</h1>
+      <p>Carga el video o el audio de un acordeonero. La app escucha la melodía y los bajos, calcula el tempo y te arma la partitura con la tablatura en tu acordeón <b>${esc(t.name)}</b>. Desde ahí la practicas, la corriges o la descargas.</p>
+    </header>
+    <div class="card">
+      <div class="row-ctrls">
+        <label class="btn">${icon('file')} Elegir video o audio<input type="file" accept="video/*,audio/*" hidden></label>
+        <label>Título <input name="title" placeholder="Nombre de la canción"></label>
+        <label>Compás <select name="meter"><option value="2/4">2/4 (paseo, son)</option><option value="6/8">6/8 (merengue, puya)</option><option value="4/4">4/4</option></select></label>
+        <label>Detector <select name="algo"><option value="salience">Con conjunto (caja, guacharaca, voz)</option><option value="yin">Acordeón solo</option></select></label>
+        <button class="btn accent analyze" disabled>Analizar</button>
       </div>
-      <div class="kb-wrap"></div>
-    </div>`;
+      <p class="status muted">Se procesa en tu dispositivo, no se sube a ningún lado. Sirve un video grabado con el celular. Los enlaces de YouTube no se pueden leer desde el navegador.</p>
+      <div class="bar" hidden><div></div></div>
+      <video controls playsinline hidden></video>
+    </div>
+    <div class="panel-host"></div>`;
   main.append(root);
   const q = (s) => root.querySelector(s);
   const video = q('video');
-  const kb = createKeyboard(q('.kb-wrap'), { tuning: t, mode: 'both', showBass: false });
-  let file = null, notes = [], A = null, B = null, raf = 0, lastIdx = -2;
+  let file = null;
 
   q('input[type=file]').onchange = (e) => {
     file = e.target.files[0];
     if (!file) return;
+    if (video.src) URL.revokeObjectURL(video.src);
     video.src = URL.createObjectURL(file);
-    q('.video-grid').hidden = false;
+    video.hidden = false;
     q('.analyze').disabled = false;
-    q('.status').textContent = file.name;
+    if (!q('[name=title]').value) q('[name=title]').value = file.name.replace(/\.\w+$/, '').replace(/[_-]+/g, ' ');
+    q('.status').textContent = `${file.name} listo. Dale a Analizar.`;
   };
-  q('[name=rate]').onchange = (e) => { video.playbackRate = +e.target.value; };
-  q('.setA').onclick = () => { A = video.currentTime; showAB(); };
-  q('.setB').onclick = () => { B = video.currentTime; showAB(); };
-  const showAB = () => { q('.ab').textContent = `A ${A?.toFixed(1) ?? '–'} s · B ${B?.toFixed(1) ?? '–'} s`; };
+
+  const setP = (p, msg) => { q('.bar div').style.width = `${Math.round(p * 100)}%`; if (msg) q('.status').textContent = msg; };
 
   q('.analyze').onclick = async () => {
     q('.analyze').disabled = true;
     q('.bar').hidden = false;
     try {
-      q('.status').textContent = 'Decodificando audio…';
+      setP(0.02, 'Leyendo el audio…');
       const data = await file.arrayBuffer();
       const tmp = new AudioContext();
       const decoded = await tmp.decodeAudioData(data);
       tmp.close();
-      // Mezcla a mono, remuestrea y filtra el registro de la melodía
       const len = Math.ceil(decoded.duration * ANALYSIS_SR);
       const off = new OfflineAudioContext(1, len, ANALYSIS_SR);
       const src = off.createBufferSource(); src.buffer = decoded;
-      const hp = off.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 140;
-      const lp = off.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6000;
-      src.connect(hp).connect(lp).connect(off.destination); src.start();
-      const rendered = await off.startRendering();
-      const samples = rendered.getChannelData(0);
-      // Normaliza para que la compuerta de energía no dependa del volumen de la grabación
+      const lp = off.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 7000;
+      src.connect(lp).connect(off.destination); src.start();
+      const samples = (await off.startRendering()).getChannelData(0);
       let peak = 0; for (let k = 0; k < samples.length; k++) peak = Math.max(peak, Math.abs(samples[k]));
       if (peak > 0) for (let k = 0; k < samples.length; k++) samples[k] /= peak;
-      q('.status').textContent = 'Buscando notas…';
-      const { notes: raw } = await analyzeBuffer(samples, ANALYSIS_SR, {
-        frameSize: 2048, hop: 256, algorithm: q('[name=algo]').value,
-        detector: { minRms: 0.02 },
-        onProgress: (p) => { q('.bar div').style.width = `${(p * 100).toFixed(0)}%`; },
+
+      setP(0.08, 'Buscando la melodía…');
+      const { notes: raw, frames } = await analyzeBuffer(samples, ANALYSIS_SR, {
+        frameSize: 2048, hop: 256, algorithm: q('[name=algo]').value, detector: { minRms: 0.02 },
+        onProgress: (p) => setP(0.08 + p * 0.6),
       });
-      const cleaned = foldToInstrument(t, cleanNotes(raw));
-      const fing = fingerSequence(t, cleaned.map((n) => n.played));
-      notes = cleaned.map((n, k) => ({ ...n, pos: fing.positions[k] }));
-      q('.status').textContent = `${notes.length} notas encontradas. Revisa a oído: es una propuesta, no una partitura exacta.`;
-      renderTab(); drawRoll(); q('.csv').disabled = false;
-      cancelAnimationFrame(raf); tick();
+      setP(0.7, 'Escuchando los bajos…');
+      const bass = await analyzeBass(samples, ANALYSIS_SR, { melodyFrames: frames, onProgress: (p) => setP(0.7 + p * 0.25) });
+      setP(0.97, 'Calculando tempo y tablatura…');
+      const melody = foldToInstrument(t, cleanNotes(raw));
+      const song = songFromAnalysis({ title: q('[name=title]').value.trim() || file.name, tuningId: t.id, melody, bass, meter: q('[name=meter]').value, duration: decoded.duration });
+      song.source = { file: file.name };
+      state.song = song;
+      setP(1, `Listo: ${song.notes.length} notas y ${song.bass.length} golpes de bajo, a unos ${Math.round(song.bpm)} pulsos por minuto. Revisa a oído: es una propuesta, se puede corregir nota por nota.`);
+      mountSongPanel(q('.panel-host'), song, { state, video });
+      q('.panel-host').scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       console.error(e);
       q('.status').textContent = 'No se pudo analizar este archivo: ' + e.message;
@@ -122,69 +115,5 @@ export function mountVideo(main, state) {
     }
   };
 
-  function label(n) {
-    if (!n.pos) return 'sin botón';
-    const row = ROWS.find((r) => r.id === n.pos.btn.row).label.replace('Hilera ', '');
-    return `${row} ${n.pos.btn.index} · ${n.pos.dir === 'push' ? 'cerrando' : 'abriendo'}`;
-  }
-
-  function renderTab() {
-    q('.tab').innerHTML = notes.map((n, k) =>
-      `<li class="chip ${n.pos ? n.pos.dir : 'missing'}" data-k="${k}" title="${esc(label(n))} · ${n.start.toFixed(2)} s"><b>${k + 1}</b> ${esc(T.nameEs(T.spellPc(n.played, t.pref)))}</li>`).join('');
-    q('.tab').querySelectorAll('li').forEach((li) => li.onclick = () => { video.currentTime = notes[+li.dataset.k].start; });
-  }
-
-  function drawRoll() {
-    const cv = q('.roll');
-    cv.width = cv.clientWidth * devicePixelRatio; cv.height = 160 * devicePixelRatio;
-    const g = cv.getContext('2d'); g.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-    const W = cv.clientWidth, H = 160, dur = video.duration || (notes.at(-1)?.end ?? 1);
-    g.clearRect(0, 0, W, H);
-    if (!notes.length) return;
-    const lo = Math.min(...notes.map((n) => n.played)) - 1, hi = Math.max(...notes.map((n) => n.played)) + 1;
-    const css = getComputedStyle(document.documentElement);
-    for (const n of notes) {
-      g.fillStyle = n.pos?.dir === 'pull' ? css.getPropertyValue('--pull') : css.getPropertyValue('--push');
-      const y = H - ((n.played - lo) / (hi - lo)) * H;
-      g.fillRect((n.start / dur) * W, y - 3, Math.max(2, ((n.end - n.start) / dur) * W), 6);
-    }
-    g.fillStyle = css.getPropertyValue('--ink');
-    g.fillRect((video.currentTime / dur) * W, 0, 2, H);
-    if (A != null && B != null) { g.fillStyle = 'rgba(120,120,255,.15)'; g.fillRect((A / dur) * W, 0, ((B - A) / dur) * W, H); }
-  }
-  q('.roll').onclick = (e) => { const r = e.target.getBoundingClientRect(); video.currentTime = ((e.clientX - r.left) / r.width) * (video.duration || 0); };
-
-  function tick() {
-    const tNow = video.currentTime;
-    if (q('[name=loop]').checked && A != null && B != null && B > A && tNow >= B) video.currentTime = A;
-    let idx = -1;
-    for (let k = 0; k < notes.length; k++) { if (notes[k].start <= tNow + 0.02) idx = k; else break; }
-    if (idx !== lastIdx) {
-      lastIdx = idx;
-      const cur = notes[idx], next = notes[idx + 1];
-      const marks = [];
-      if (next?.pos) marks.push({ btnId: next.pos.btn.id, dir: next.pos.dir, label: '›' });
-      if (cur?.pos && tNow <= cur.end + 0.15) marks.push({ btnId: cur.pos.btn.id, dir: cur.pos.dir, label: '●', active: true });
-      kb.mark(marks);
-      q('.big-note').textContent = cur ? T.nameEs(T.spellPc(cur.played, t.pref)) : '—';
-      q('.where').textContent = cur ? label(cur) : '';
-      q('.tab').querySelectorAll('li').forEach((li) => li.classList.toggle('on', +li.dataset.k === idx));
-      const on = q('.tab li.on'); if (on && !video.paused) on.scrollIntoView({ block: 'nearest', inline: 'center' });
-    }
-    drawRoll();
-    raf = requestAnimationFrame(tick);
-  }
-
-  q('.csv').onclick = () => {
-    const rows = [['n', 'inicio_s', 'fin_s', 'nota', 'cifrado', 'hilera', 'boton', 'fuelle']];
-    notes.forEach((n, k) => {
-      const sp = T.spellPc(n.played, t.pref);
-      rows.push([k + 1, n.start.toFixed(3), n.end.toFixed(3), T.nameEs(sp), T.nameEn(sp), n.pos?.btn.row ?? '', n.pos?.btn.index ?? '', n.pos ? (n.pos.dir === 'push' ? 'cerrando' : 'abriendo') : '']);
-    });
-    const blob = new Blob([rows.map((r) => r.join(',')).join('\n')], { type: 'text/csv' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = (file?.name || 'video').replace(/\.\w+$/, '') + `-${t.id}.csv`; a.click();
-  };
-
-  state.cleanup.push(() => { cancelAnimationFrame(raf); video.pause(); if (video.src) URL.revokeObjectURL(video.src); });
+  state.cleanup.push(() => { video.pause(); if (video.src) URL.revokeObjectURL(video.src); });
 }

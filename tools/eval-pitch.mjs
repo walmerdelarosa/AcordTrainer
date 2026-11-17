@@ -8,12 +8,14 @@
 //  - clase:  % de cuadros con la clase de nota correcta (ignorando octava; es lo que usa la app)
 //  - cents:  error mediano en cents de los aciertos
 //  - notas:  F1 a nivel de nota (onset ±80 ms) tras el seguidor
+//  - bajos:  % de eventos de la mano izquierda con tipo (bajo/acorde) y nota correctos
 //
 // IMPORTANTE: esto es sintético. Sirve para comparar ajustes; la calibración final
 // debe hacerse con grabaciones reales etiquetadas (ver docs/PLAN.md, "Afinar el pitch").
 
 import { YinDetector, freqToMidiFloat } from '../js/pitch/yin.js';
 import { analyzeBuffer, createDetector } from '../js/pitch/tracker.js';
+import { analyzeBass } from '../js/pitch/bass.js';
 const ALGO = process.argv.includes('--algo') ? process.argv[process.argv.indexOf('--algo') + 1] : 'yin';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, arr) => {
@@ -52,11 +54,18 @@ function accordionNote(out, midi, start, len, { tremolo = 12, voices = 'MM', amp
   if (voices.startsWith('L')) reed(out, f / 2, amp * 0.7, start, len);
 }
 
-function addBass(out, midiRoot, amp) { // bajo + acorde de la mano izquierda
+// Mano izquierda: bajo en el tiempo y acorde en el contratiempo, progresión I–IV–V–I (Si♭).
+const BASS_TRUTH = [];
+function addBass(out, _root, amp) {
   const n = out.length, beat = Math.floor(0.25 * SR);
-  for (let s = 0; s + beat < n; s += beat * 2) {
-    reed(out, mtof(midiRoot - 12), amp, s, beat);
-    for (const iv of [0, 4, 7]) reed(out, mtof(midiRoot + iv), amp * 0.5, s + beat, beat);
+  const roots = [58, 63, 65, 58]; // Si♭, Mi♭, Fa, Si♭
+  BASS_TRUTH.length = 0;
+  for (let s = 0, k = 0; s + 2 * beat < n; s += beat * 2, k++) {
+    const r = roots[Math.floor(k / 2) % 4];
+    reed(out, mtof(r - 24), amp, s, Math.floor(beat * 0.85));
+    reed(out, mtof(r - 12), amp * 0.6, s, Math.floor(beat * 0.85)); // octava del bajo
+    for (const iv of [0, 4, 7]) reed(out, mtof(r + iv - 12 + (iv ? 12 : 12)), amp * 0.45, s + beat, Math.floor(beat * 0.85));
+    BASS_TRUTH.push({ start: s / SR, kind: 'bajo', pc: r % 12 }, { start: (s + beat) / SR, kind: 'acorde', pc: r % 12 });
   }
 }
 
@@ -135,7 +144,17 @@ for (const scn of SCENARIOS) {
     if (Math.abs(err) < 0.5) { ok++; cents.push(Math.abs(err * 100)); }
     else if (Math.abs(Math.abs(err) - 12) < 0.5) { oct++; if (process.env.DBG) console.log("oct", truth.midi, err.toFixed(2), (t-truth.start).toFixed(2)); }
   }
-  const { notes: found } = await analyzeBuffer(out, SR, { frameSize: FRAME, hop: HOP, algorithm: ALGO, detector: detOpts });
+  const { notes: found, frames } = await analyzeBuffer(out, SR, { frameSize: FRAME, hop: HOP, algorithm: ALGO, detector: detOpts });
+  let bassAcc = '-';
+  if (scn.bass) {
+    const ev = await analyzeBass(out, SR, { melodyFrames: frames });
+    let ok = 0;
+    for (const tr of BASS_TRUTH) {
+      const d = ev.find((e) => Math.abs(e.start - tr.start) < 0.07);
+      if (d && d.kind === tr.kind && d.pc === tr.pc) ok++;
+    }
+    bassAcc = (100 * ok / BASS_TRUTH.length).toFixed(1) + ` (${ev.length}/${BASS_TRUTH.length})`;
+  }
   let tp = 0; const used = new Set();
   for (const n of notes) {
     const m = found.findIndex((f, i) => !used.has(i) && f.midi === n.midi && Math.abs(f.start - n.start) < 0.08);
@@ -151,6 +170,7 @@ for (const scn of SCENARIOS) {
     clase: (100 * pcOk / voicedFrames).toFixed(1),
     cents: cents.length ? cents[Math.floor(cents.length / 2)].toFixed(1) : '-',
     notasF1: ((2 * prec * rec) / (prec + rec || 1)).toFixed(2),
+    bajos: bassAcc,
   });
 }
 if (args.json) console.log(JSON.stringify({ detOpts, rows }, null, 2));
