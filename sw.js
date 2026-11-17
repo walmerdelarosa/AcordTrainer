@@ -1,5 +1,5 @@
 // Modo sin conexión: guarda la app y la sirve desde caché; se actualiza en segundo plano.
-const VERSION = 'acortrainer-v4';
+const VERSION = 'acortrainer-v5';
 const FILES = [
   './', 'index.html', 'css/styles.css', 'icon.svg', 'manifest.webmanifest',
   'js/app.js', 'js/theory.js', 'js/instrument.js', 'js/exercises.js', 'js/lessons.js', 'js/resources.js',

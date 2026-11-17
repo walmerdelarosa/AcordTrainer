@@ -4,7 +4,7 @@
 import * as T from './theory.js';
 import { getTuning, bassNumber } from './instrument.js';
 import { METERS, ticksPerMeasure } from './rhythm.js';
-import { layoutVoice, estimateKey } from './song.js';
+import { layoutVoice, songKey } from './song.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const G = 8; // espacio entre líneas del pentagrama
@@ -28,7 +28,7 @@ const stepOf = (n, midi) => {
 
 export function renderScore(container, song, { onSelect, showStaff = true, lang = 'es' } = {}) {
   const tuning = getTuning(song.tuningId);
-  const key = estimateKey(song.notes);
+  const key = songKey(song);
   const tpm = ticksPerMeasure(song.meter), tpb = METERS[song.meter].ticksPerBeat;
   const ppt = song.meter === '6/8' ? 24 : 15; // píxeles por tick
   const mW = tpm * ppt + 18;

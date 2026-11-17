@@ -2,7 +2,7 @@
 // (acordeón real). Modo paso a paso (espera la nota) o con ritmo (guacharaca y bajos,
 // mide si llegas a tiempo).
 import * as T from './theory.js';
-import { ROWS } from './instrument.js';
+import { ROWS, bassNumber } from './instrument.js';
 import { createSurface } from './surface.js';
 import { createDetector, NoteTracker } from './pitch/tracker.js';
 import { freqToMidiFloat } from './pitch/yin.js';
@@ -32,7 +32,7 @@ export function mountPractice(main, state, F) {
       <div class="row-ctrls">
         <label>Qué tocar <select name="source">
           <option value="ex" ${ex ? 'selected' : ''}>Ejercicio: ${esc(ex ? ex.title : 'escala de la hilera de afuera')}</option>
-          <option value="demo-${t.id}" ${song?.id === 'demo-' + t.id ? 'selected' : ''}>Canción: Paseo de práctica (ejemplo)</option>
+          <option value="demo-${t.id}" ${song?.id === 'demo-' + t.id ? 'selected' : ''}>Bajos: marcación de paseo (ejemplo)</option>
           ${song && !song.id.startsWith('demo') && !saved.some((s) => s.id === song.id) ? `<option value="current" selected>Canción: ${esc(song.title)} (sin guardar)</option>` : ''}
           ${saved.map((s) => `<option value="${s.id}" ${song?.id === s.id ? 'selected' : ''}>Canción: ${esc(s.title)}</option>`).join('')}
         </select></label>
@@ -79,7 +79,13 @@ export function mountPractice(main, state, F) {
 
   // ----- Objetivos -----
   let targets;
-  if (song) targets = song.notes.map((n, i) => ({ midi: n.midi, pos: n.pos, name: T.nameEs(T.spellPc(T.midiToPc(n.midi), t.pref)), tick: n.tick, i }));
+  // Canción sin melodía (p. ej. la marcación de ejemplo): se practica la mano izquierda
+  const bassOnly = !!song && song.notes.length === 0;
+  if (bassOnly) targets = song.bass.filter((b) => b.pos).map((b, i) => {
+    const nm = T.nameEs(T.spellPc(b.pc, t.pref));
+    return { bass: true, kind: b.kind, pc: b.pc, pos: b.pos, tick: b.tick, i, name: b.kind === 'bajo' ? nm : `${nm.toLowerCase()} (acorde)` };
+  });
+  else if (song) targets = song.notes.map((n, i) => ({ midi: n.midi, pos: n.pos, name: T.nameEs(T.spellPc(T.midiToPc(n.midi), t.pref)), tick: n.tick, i }));
   else targets = ex.midis.map((m, i) => ({ midi: m, pos: ex.positions[i], name: ex.names[i], i })).filter((x) => x.pos);
 
   let input = state.practiceInput || 'keys', mode = 'step', running = false;
@@ -91,7 +97,10 @@ export function mountPractice(main, state, F) {
 
   const surface = createSurface(q('.surface-host'), {
     tuning: t,
-    onNote: (e) => { if (input === 'keys' && !e.bass) judge({ midi: e.midi, btnId: e.btn.id, dir: e.dir }); },
+    onNote: (e) => {
+      if (input !== 'keys' || (bassOnly ? !e.bass : e.bass)) return;
+      judge({ midi: e.midi, btnId: e.btn.id, dir: e.dir, bass: e.bass, kind: e.btn.kind, pc: e.bass ? e.btn[e.dir] : null });
+    },
   });
 
   function rangeTargets() {
@@ -106,14 +115,14 @@ export function mountPractice(main, state, F) {
     const tg = active[cur];
     if (!tg) { q('.big-note').textContent = '¡Listo!'; q('.where').textContent = ''; surface.kb.mark([]); return; }
     q('.big-note').textContent = tg.name;
-    const row = ROWS.find((r) => r.id === tg.pos?.btn.row)?.label ?? '';
-    q('.where').innerHTML = tg.pos ? `${esc(row)}, botón ${tg.pos.btn.index} · <b class="${tg.pos.dir}-t">${tg.pos.dir === 'push' ? 'cerrando' : 'abriendo'}</b>` : '';
+    const row = tg.bass ? `Bajos, ${tg.kind} ${bassNumber(tg.pos.btn)}` : `${ROWS.find((r) => r.id === tg.pos?.btn.row)?.label ?? ''}, botón ${tg.pos?.btn.index}`;
+    q('.where').innerHTML = tg.pos ? `${esc(row)} · <b class="${tg.pos.dir}-t">${tg.pos.dir === 'push' ? 'cerrando' : 'abriendo'}</b>` : '';
     const next = active[cur + 1];
     const marks = [];
     if (next?.pos && mode === 'step') marks.push({ btnId: next.pos.btn.id, dir: next.pos.dir, label: '›' });
     if (tg.pos) marks.push({ btnId: tg.pos.btn.id, dir: tg.pos.dir, label: '●', active: true });
     surface.kb.mark(marks);
-    if (score && mode === 'step') { score.select(tg.i); score.setCursor(tg.tick); }
+    if (score && mode === 'step') { if (!bassOnly) score.select(tg.i); score.setCursor(tg.tick); }
     if (chips) chips.querySelectorAll('li').forEach((li) => li.classList.toggle('on', +li.dataset.k === cur));
     q('.tally').textContent = `${hits} / ${hits + misses}`;
   }
@@ -125,6 +134,7 @@ export function mountPractice(main, state, F) {
   }
 
   function matches(tg, e) {
+    if (tg.bass) return (e.btnId === tg.pos?.btn.id && e.dir === tg.pos?.dir) || (e.bass && e.kind === tg.kind && e.pc === tg.pc);
     if (e.btnId) return (e.btnId === tg.pos?.btn.id && e.dir === tg.pos?.dir) || e.midi === tg.midi;
     return q('[name=octave]').checked ? T.midiToPc(e.midi) === T.midiToPc(tg.midi) : e.midi === tg.midi;
   }
@@ -137,7 +147,7 @@ export function mountPractice(main, state, F) {
     if (!tg) return;
     if (matches(tg, e)) {
       hits++;
-      score?.mark(tg.i, 'ok');
+      if (!bassOnly) score?.mark(tg.i, 'ok');
       if (e.btnId && e.btnId !== tg.pos?.btn.id) feedback('Bien, aunque usaste otra posición', 'ok');
       else feedback(pick(PRAISE), 'ok');
       cur++;
@@ -170,7 +180,7 @@ export function mountPractice(main, state, F) {
     results.push(ms);
     hits++;
     const cls = Math.abs(ms) <= 70 ? 'ok' : ms < 0 ? 'early' : 'late';
-    score.mark(best.tg.i, cls);
+    if (!bassOnly) score.mark(best.tg.i, cls);
     feedback(cls === 'ok' ? '¡A tiempo!' : cls === 'early' ? `Adelantado ${-ms} ms` : `Atrasado ${ms} ms`, cls === 'ok' ? 'ok' : 'warn');
     q('.tally').textContent = `${hits} / ${active.length}`;
   }
@@ -179,7 +189,7 @@ export function mountPractice(main, state, F) {
     const tickSec = 60 / (song.bpm * METERS[song.meter].ticksPerBeat) / player.opts.speed;
     const now = player.tick, win = 0.28 / tickSec;
     for (const tg of active) {
-      if (!matched.has(tg.i) && now - tg.tick > win && !tg._missed) { tg._missed = true; misses++; score.mark(tg.i, 'miss'); }
+      if (!matched.has(tg.i) && now - tg.tick > win && !tg._missed) { tg._missed = true; misses++; if (!bassOnly) score.mark(tg.i, 'miss'); }
     }
     // Mostrar la siguiente nota por tocar
     const nxt = active.find((tg) => !matched.has(tg.i) && !tg._missed && tg.tick >= now - win);
@@ -245,7 +255,7 @@ export function mountPractice(main, state, F) {
       const tpm = ticksPerMeasure(song.meter);
       const f = Math.max(1, +q('[name=from]').value || 1), to = Math.max(f, +q('[name=to]').value || song.measures);
       player = new SongPlayer(song, { onTick: (tk) => score.setCursor(tk), onEnd: () => setTimeout(finish, 400) });
-      player.play({ from: (f - 1) * tpm, to: to * tpm, speed: +q('[name=speed]').value, melody: false, bass: true, metronome: true, countIn: true });
+      player.play({ from: (f - 1) * tpm, to: to * tpm, speed: +q('[name=speed]').value, melody: false, bass: !bassOnly, metronome: true, countIn: true });
       rhythmTimer = setInterval(rhythmWatch, 50);
       feedback('Un compás de cuenta y arrancas', 'ok');
     }
@@ -293,6 +303,12 @@ export function mountPractice(main, state, F) {
   root.querySelectorAll('[data-mode]').forEach((b) => b.onclick = () => setMode(b.dataset.mode));
   q('.start').onclick = start;
   ['from', 'to'].forEach((n) => { const x = q(`[name=${n}]`); if (x) x.onchange = () => { active = rangeTargets(); cur = 0; show(); }; });
+  if (bassOnly) {
+    q('[data-in="mic"]').disabled = true;
+    q('[data-in="mic"]').title = 'Con micrófono solo se evalúa la mano derecha';
+    input = 'keys';
+    q('.page-head').insertAdjacentHTML('beforeend', '<p class="muted small">Ejercicio de mano izquierda: usa los bajos (fila de números del teclado o los botones de bajo en pantalla). Con micrófono, por ahora, solo se evalúa la mano derecha.</p>');
+  }
   setInput(input); setMode('step');
   show();
   state.cleanup.push(() => { stop(); surface.destroy(); });

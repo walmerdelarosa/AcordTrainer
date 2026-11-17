@@ -108,7 +108,8 @@ export function createKeyboard(container, opts = {}) {
         const r = state.orientation === 'horizontal' ? 17 : 20;
         const dir = state.mode === 'pull' ? 'pull' : 'push';
         const g = el('g', { class: 'kb-btn bass ' + b.kind + (state.pressed.has(b.id) ? ' pressed' : ''), 'data-id': b.id }, svg);
-        el('circle', { cx, cy, r, class: `kb-circle ${dir}` }, g);
+        const bm = state.marks.get(`${b.id}:push`) || state.marks.get(`${b.id}:pull`);
+        el('circle', { cx, cy, r, class: `kb-circle ${bm ? bm.dir : dir}` + (bm ? ' marked' + (bm.active ? ' active' : '') : '') }, g);
         const n = spellPc(b[dir], t.pref);
         const nm = state.lang === 'es' ? nameEs(n) : nameEn(n);
         el('text', { x: cx, y: cy + 2, class: 'kb-lbl small', 'text-anchor': 'middle' }, g, b.kind === 'bajo' ? nm : nm.toLowerCase());

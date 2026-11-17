@@ -61,16 +61,19 @@ export function mountSongPanel(root, song, { state, video = null, onSaved } = {}
   </section>`;
   const q = (s) => root.querySelector(s);
   let score, selected = -1;
-  const followKb = createKeyboard(q('.follow-kb'), { tuning, mode: 'both', showBass: false, orientation: 'horizontal' });
+  const bassOnly = song.notes.length === 0;
+  const followKb = createKeyboard(q('.follow-kb'), { tuning, mode: 'both', showBass: bassOnly, orientation: 'horizontal' });
 
   const player = new SongPlayer(song, {
     onTick: (tick) => { score.setCursor(tick); follow(tick); },
     onEnd: () => { q('.play').innerHTML = `${icon('play')} Escuchar`; score.setCursor(null); },
   });
 
+  const followList = () => (song.notes.length ? song.notes : song.bass);
   function noteAt(tick) {
+    const list = followList();
     let idx = -1;
-    for (let i = 0; i < song.notes.length; i++) { if (song.notes[i].tick <= tick + 0.01) idx = i; else break; }
+    for (let i = 0; i < list.length; i++) { if (list[i].tick <= tick + 0.01) idx = i; else break; }
     return idx;
   }
   let lastFollow = -2;
@@ -78,7 +81,8 @@ export function mountSongPanel(root, song, { state, video = null, onSaved } = {}
     const i = noteAt(tick);
     if (i === lastFollow) return;
     lastFollow = i;
-    const cur = song.notes[i], next = song.notes[i + 1];
+    const list = followList();
+    const cur = list[i], next = list[i + 1];
     const marks = [];
     if (next?.pos) marks.push({ btnId: next.pos.btn.id, dir: next.pos.dir, label: '›' });
     if (cur?.pos && tick < cur.tick + cur.dur + 0.5) marks.push({ btnId: cur.pos.btn.id, dir: cur.pos.dir, label: '●', active: true });

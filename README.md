@@ -10,7 +10,7 @@ Aplicación web para aprender **acordeón diatónico colombiano** (vallenato) de
 | **Escalas y acordes** | Cualquier escala, acorde o ejercicio de intervalos en cualquier tónica, con la digitación sugerida. |
 | **Botonera** | Los 31 botones y los 12 bajos con sonido. Se toca con el mouse, con el dedo o con el **teclado del PC**: fila Q = afuera, fila A = medio, fila Z = adentro, números = bajos y **barra espaciadora = fuelle** (mano izquierda). Si mantienes un botón y cambias el fuelle, cambia la nota, igual que en el instrumento. |
 | **Sacar de un video** | Detecta la melodía **y la mano izquierda** (bajo y acorde), estima el tempo y arma una canción con **partitura + tablatura** sincronizada con el video. |
-| **Canciones** | Partitura y tablatura con reproducción (velocidad, bucle por compases, guacharaca de metrónomo, bajos), edición nota por nota y descarga en **MusicXML**, **MIDI** o CSV. Se guardan en el navegador. |
+| **Canciones** | Partitura y tablatura con reproducción (velocidad, bucle por compases, guacharaca de metrónomo, bajos), edición nota por nota y descarga en **MusicXML**, **MIDI** o CSV. Se guardan en el navegador. Incluye de ejemplo la **marcación de paseo** (solo bajos, I–IV–V–I) para practicar la mano izquierda. |
 | **Practicar** | Ejercicios o canciones, con el teclado del PC/pantalla o con el **acordeón real por micrófono**. Modo paso a paso o **con ritmo** (dice si llegas a tiempo, adelantado o atrasado). |
 
 ### Tablatura

@@ -1,7 +1,7 @@
 // Modelo de canción (melodía + mano izquierda, en tiempo y en rejilla) y exportadores.
 // Sin DOM: se puede probar en Node.
 import * as T from './theory.js';
-import { getTuning, buttons, bassButtons, bassNumber, fingerSequence, assignBass, bellowsHintsFromBass, ROWS } from './instrument.js';
+import { getTuning, buttons, bassButtons, bassNumber, bassPositions, fingerSequence, assignBass, bellowsHintsFromBass, ROWS } from './instrument.js';
 import { METERS, ticksPerMeasure, quantize, estimateTempo, tickToSec } from './rhythm.js';
 
 export const ROW_CODE = { afuera: 'af', medio: 'me', adentro: 'ad' };
@@ -79,6 +79,12 @@ export function refinger(song) {
 // ---------- Tonalidad ----------
 const KK_MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
 const FIFTHS = { 0: 0, 7: 1, 2: 2, 9: 3, 4: 4, 11: 5, 6: -6, 1: -5, 8: -4, 3: -3, 10: -2, 5: -1 };
+
+/** Tonalidad de una canción: por la melodía o, si no tiene, por los bajos. */
+export function songKey(song) {
+  if (song.notes.length) return estimateKey(song.notes);
+  return estimateKey(song.bass.map((b) => ({ midi: 48 + b.pc, dur: b.kind === 'bajo' ? 2 : 1 })));
+}
 
 /** Tonalidad mayor más probable (perfil de Krumhansl–Kessler). */
 export function estimateKey(notes) {
@@ -167,7 +173,7 @@ const xmlEsc = (s) => String(s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '
 export function toMusicXML(song) {
   const tuning = getTuning(song.tuningId);
   const meter = METERS[song.meter];
-  const key = estimateKey(song.notes);
+  const key = songKey(song);
   const tpm = ticksPerMeasure(song.meter);
   const mel = layoutVoice(song.notes, song.measures, song.meter);
   const bas = layoutVoice(song.bass, song.measures, song.meter);
@@ -262,39 +268,38 @@ export function toCSV(song) {
   return rows.map((r) => r.join(',')).join('\n');
 }
 
-/** Canción de ejemplo (melodía original) para probar sin cargar video. */
+/**
+ * Ejemplo para probar sin cargar video: marcación de la mano izquierda (bajo en el tiempo,
+ * acorde en el contratiempo) sobre I–IV–V–I en la tonalidad de la hilera del medio.
+ * No lleva melodía. Patrón básico de referencia, por validar con un acordeonero.
+ */
 export function demoSong(tuningId = 'cinco-letras') {
-  const tuning = getTuning(tuningId);
-  const k = tuning.offset; // transporta al cambiar de afinación
-  // Paseo en Si♭ (melodía original de práctica). [semitonos desde Si♭3, ticks de duración]
-  const line = [
-    [0, 2], [2, 2], [4, 2], [7, 2], [9, 4], [7, 2], [4, 2],
-    [5, 2], [4, 2], [2, 2], [0, 2], [2, 6], [-1, 2],
-    [0, 2], [4, 2], [7, 2], [12, 2], [11, 4], [9, 2], [7, 2],
-    [9, 2], [7, 2], [5, 2], [2, 2], [0, 8],
-  ];
+  const tun = getTuning(tuningId);
+  const k = tun.offset;
   const bpm = 100, meter = '2/4', secPerTick = 60 / bpm / 4;
-  let tick = 0;
-  const melody = line.map(([iv, d]) => { const n = { midi: 58 + k + iv, start: tick * secPerTick, end: (tick + d) * secPerTick }; tick += d; return n; });
-  const roots = [10, 10, 5, 10, 3, 10, 5, 10]; // I I V I IV I V I
+  // En Cinco Letras: medio = Mi♭ (I), adentro = La♭ (IV), afuera = Si♭ (V)
+  const I = (3 + k + 12) % 12, IV = (8 + k + 12) % 12, V = (10 + k + 12) % 12;
+  const prog = [I, I, IV, IV, V, V, I, I];
   const bass = [];
-  for (let m = 0; m < 8; m++) {
-    const r = (roots[m] + k + 12) % 12;
+  prog.forEach((r, m) => {
     for (let b = 0; b < 2; b++) {
       const t = (m * 8 + b * 4) * secPerTick;
       bass.push({ kind: 'bajo', pc: r, quality: null, start: t, end: t + 2 * secPerTick });
       bass.push({ kind: 'acorde', pc: r, quality: 'mayor', start: t + 2 * secPerTick, end: t + 4 * secPerTick });
     }
-  }
-  const tun = getTuning(tuningId);
-  const hints = bellowsHintsFromBass(tun, melody, bass);
-  const fing = fingerSequence(tun, melody.map((n) => n.midi), { dirHints: hints });
-  const mel = melody.map((n, i) => ({ ...n, pos: fing.positions[i] }));
-  const bas = assignBass(tun, bass, mel);
+  });
+  // Botón de bajo: mantener el fuelle mientras se pueda (cambiarlo solo cuando el bajo lo exija)
+  let dir = 'push';
+  const bas = bass.map((e) => {
+    const cands = bassPositions(tun, e.kind, e.pc);
+    const pick = cands.find((c) => c.dir === dir) || cands[0] || null;
+    if (pick) dir = pick.dir;
+    return { ...e, pos: pick };
+  });
   const song = {
-    v: 1, id: 'demo-' + tuningId, title: 'Paseo de práctica (ejemplo)', tuningId, meter, bpm, offset: 0, duration: tick * secPerTick, demo: true,
-    created: new Date().toISOString(),
-    notes: mel.map((n) => ({ t0: n.start, t1: n.end, midi: n.midi, btnId: n.pos?.btn.id ?? null, dir: n.pos?.dir ?? null, pos: n.pos })),
+    v: 1, id: 'demo-' + tuningId, title: 'Marcación de paseo (ejemplo, solo bajos)', tuningId, meter, bpm, offset: 0,
+    duration: prog.length * 8 * secPerTick, demo: true, created: new Date().toISOString(),
+    notes: [],
     bass: bas.map((b) => ({ t0: b.start, t1: b.end, kind: b.kind, pc: b.pc, quality: b.quality, btnId: b.pos?.btn.id ?? null, dir: b.pos?.dir ?? null, pos: b.pos })),
   };
   return requantize(song);

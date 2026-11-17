@@ -53,9 +53,17 @@ const S = await import('../js/song.js');
     const r = R.estimateTempo(on);
     assert.ok(Math.abs(r.bpm - bpm) / bpm < 0.03, `tempo ${bpm} → ${r.bpm}`);
   }
-  const demo = S.demoSong('cinco-letras');
-  assert.equal(demo.measures, 8);
-  assert.ok(demo.notes.every((n) => n.pos), 'todas las notas del ejemplo tienen botón');
+  const demoBajos = S.demoSong('cinco-letras');
+  assert.equal(demoBajos.measures, 8);
+  assert.equal(demoBajos.notes.length, 0, 'el ejemplo es solo marcación de bajos');
+  assert.ok(demoBajos.bass.every((b) => b.pos), 'cada bajo del ejemplo tiene botón');
+  // Canción de prueba con melodía (escala de Si♭ con bajos), como si viniera de un análisis
+  const spt = 60 / 100 / 4;
+  const melody = [58, 60, 62, 63, 65, 67, 69, 70].map((m, i) => ({ midi: m, start: i * 4 * spt, end: (i + 1) * 4 * spt }));
+  const bassEv = [];
+  for (let k = 0; k < 8; k++) bassEv.push({ kind: k % 2 ? 'acorde' : 'bajo', pc: 10, quality: k % 2 ? 'mayor' : null, start: k * 4 * spt, end: (k + 1) * 4 * spt });
+  const demo = S.songFromAnalysis({ title: 'prueba', tuningId: 'cinco-letras', melody, bass: bassEv });
+  assert.ok(demo.notes.every((n) => n.pos), 'todas las notas tienen botón');
   // El fuelle de la melodía coincide con el de los bajos que suenan a la vez (fuelle único)
   for (const b of demo.bass) {
     const n = demo.notes.find((x) => x.tick <= b.tick && b.tick < x.tick + x.dur);
@@ -66,7 +74,7 @@ const S = await import('../js/song.js');
   }
   // MusicXML: cada compás suma lo que debe en ambos pentagramas
   for (const meter of ['2/4', '4/4', '6/8']) {
-    const s = S.demoSong(); s.meter = meter; S.requantize(s);
+    const s = structuredClone(S.serialize(demo)); S.hydrate(s); s.meter = meter; S.requantize(s);
     const xml = S.toMusicXML(s);
     const full = R.ticksPerMeasure(meter);
     for (const m of xml.split('<measure ').slice(1)) {

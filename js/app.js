@@ -242,7 +242,7 @@ function viewSongs(main) {
     <p>Las canciones que sacas de un video quedan guardadas aquí, en este navegador. Ábrelas para verlas en partitura y tablatura, practicarlas o descargarlas.</p>
     <div class="row-ctrls"><a class="btn accent" href="#/video">${icon('ear')} Sacar una canción de un video</a></div></header>`));
   const list = h(`<ul class="song-list">
-    <li><a href="#/cancion/demo-${t.id}"><b>Paseo de práctica</b> <span class="muted">ejemplo · ${esc(t.name)}</span></a></li>
+    <li><a href="#/cancion/demo-${t.id}"><b>Marcación de paseo</b> <span class="muted">ejemplo · solo bajos · I–IV–V–I · ${esc(t.name)}</span></a></li>
     ${songs.map((s) => `<li><a href="#/cancion/${s.id}"><b>${esc(s.title)}</b> <span class="muted">${esc(getTuning(s.tuningId).name)} · ${s.meter} · ${Math.round(s.bpm)} pulsos/min · ${s.notes.length} notas</span></a><button class="btn ghost xs del" data-id="${s.id}" title="Borrar">${icon('trash')}</button></li>`).join('')}
   </ul>`);
   list.querySelectorAll('.del').forEach((b) => b.onclick = () => { if (confirm('¿Borrar esta canción de este navegador?')) { deleteSong(b.dataset.id); route(); } });
